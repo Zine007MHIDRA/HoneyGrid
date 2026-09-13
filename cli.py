@@ -3,6 +3,13 @@ import sys
 import os
 import argparse
 from pathlib import Path
+
+# Force UTF-8 on Windows terminal to prevent charmap UnicodeEncodeErrors
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
