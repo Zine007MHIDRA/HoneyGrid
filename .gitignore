@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Secrets & Environment
+.env
+*.env.local
+
+# Databases & Runtime State
+*.db
+*.sqlite3
+honeygrid.db
+
+# Logs
+logs/
+*.log
+
+# Generated Traps / Decoys during testing
+traps/
+canary_test_output/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
