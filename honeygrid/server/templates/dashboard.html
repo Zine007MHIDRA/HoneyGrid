@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HoneyGrid Sentinel &bull; Incident Response & Deception SOC</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        socDark: '#0b0f19',
+                        socCard: '#111827',
+                        socBorder: '#1f293d',
+                        socCrimson: '#ef4444',
+                        socCyan: '#06b6d4'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Leaflet CSS & JS for Interactive Attack Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .pulse-marker {
+            width: 14px;
+            height: 14px;
+            background: #ef4444;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #ef4444;
+            animation: pulse 1.8s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        #attack-map { height: 380px; width: 100%; border-radius: 0.5rem; }
+        .leaflet-container { background: #0f172a !important; }
+    </style>
+</head>
+<body class="text-slate-200 min-h-screen">
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-socBorder bg-socCard/80 backdrop-blur sticky top-0 z-30 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-lg bg-socCrimson/20 border border-socCrimson/40 flex items-center justify-center text-socCrimson font-bold text-lg">
+                🍯
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    HONEYGRID <span class="text-xs bg-socCrimson/20 text-socCrimson border border-socCrimson/40 px-2 py-0.5 rounded font-mono font-medium">SENTINEL SOC</span>
+                </h1>
+                <p class="text-xs text-slate-400">Active Deception, Threat Intelligence & Autonomous Containment</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Sentinel Listener Active
+            </span>
+            <button onclick="refreshData()" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-socBorder transition">
+                ↻ Refresh Telemetry
+            </button>
+            <button onclick="openModal('token-modal')" class="px-3 py-1.5 text-xs font-medium bg-socCrimson hover:bg-red-600 text-white rounded transition shadow-lg shadow-red-900/30">
+                + Deploy Honeytoken
+            </button>
+        </div>
+    </header>
+
+    <main class="p-6 max-w-7xl mx-auto space-y-6">
+        <!-- KPI Metrics Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-socCard border border-socBorder rounded-lg p-5">
+                <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Deployed Decoys</div>
+                <div id="stat-tokens" class="text-3xl font-extrabold text-white mt-1">--</div>
+                <div class="text-xs text-slate-500 mt-1">Web, AWS, Git, PDF, KeePass Traps</div>
+            </div>
+            <div class="bg-socCard border border-socBorder rounded-lg p-5">
+                <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Captured Incidents</div>
+                <div id="stat-incidents" class="text-3xl font-extrabold text-socCrimson mt-1">--</div>
+                <div class="text-xs text-slate-500 mt-1">Triggers logged in audit database</div>
+            </div>
+            <div class="bg-socCard border border-socBorder rounded-lg p-5">
+                <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">High-Risk Adversaries</div>
+                <div id="stat-high-threat" class="text-3xl font-extrabold text-amber-400 mt-1">--</div>
+                <div class="text-xs text-slate-500 mt-1">VPN, Tor & Datacenter Scanners</div>
+            </div>
+            <div class="bg-socCard border border-socBorder rounded-lg p-5">
+                <div class="text-xs font-medium text-slate-400 uppercase tracking-wider">Unique Attacker IPs</div>
+                <div id="stat-attackers" class="text-3xl font-extrabold text-socCyan mt-1">--</div>
+                <div class="text-xs text-slate-500 mt-1">Distinct IP vectors fingerprinted</div>
+            </div>
+        </div>
+
+        <!-- Global Attack Map -->
+        <div class="bg-socCard border border-socBorder rounded-lg p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div>
+                    <h2 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+                        🌍 Global Threat Telemetry & Attack Map
+                    </h2>
+                    <p class="text-xs text-slate-400">Real-time geospatial origins of adversaries tripping HoneyGrid traps</p>
+                </div>
+                <span class="text-xs text-slate-500 font-mono">Live Ingestion</span>
+            </div>
+            <div id="attack-map"></div>
+        </div>
+
+        <!-- Tabs: Incidents & Deployed Tokens -->
+        <div class="space-y-4">
+            <div class="flex space-x-2 border-b border-socBorder">
+                <button onclick="switchTab('incidents')" id="tab-btn-incidents" class="px-4 py-2 text-sm font-medium border-b-2 border-socCrimson text-white">
+                    🚨 Incident Telemetry Feed
+                </button>
+                <button onclick="switchTab('tokens')" id="tab-btn-tokens" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+                    🛡️ Active Honeytokens (<span id="token-count-badge">0</span>)
+                </button>
+                <button onclick="switchTab('report')" id="tab-btn-report" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+                    📑 Executive IR Report
+                </button>
+            </div>
+
+            <!-- Tab 1: Incidents Feed -->
+            <div id="tab-incidents" class="bg-socCard border border-socBorder rounded-lg overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-900/60 text-slate-400 border-b border-socBorder uppercase text-[10px] tracking-wider">
+                            <tr>
+                                <th class="p-3.5">Timestamp</th>
+                                <th class="p-3.5">Attacker IP</th>
+                                <th class="p-3.5">Threat Score</th>
+                                <th class="p-3.5">Location & ISP</th>
+                                <th class="p-3.5">Client & Hardware</th>
+                                <th class="p-3.5">Tripped Decoy</th>
+                                <th class="p-3.5 text-right">SOAR Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="incidents-table-body" class="divide-y divide-socBorder/50 font-mono">
+                            <tr>
+                                <td colspan="7" class="p-6 text-center text-slate-500 font-sans">Loading security telemetry...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab 2: Tokens List -->
+            <div id="tab-tokens" class="hidden bg-socCard border border-socBorder rounded-lg overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-900/60 text-slate-400 border-b border-socBorder uppercase text-[10px] tracking-wider">
+                            <tr>
+                                <th class="p-3.5">Token ID</th>
+                                <th class="p-3.5">Type</th>
+                                <th class="p-3.5">Label</th>
+                                <th class="p-3.5">Triggers</th>
+                                <th class="p-3.5">Created</th>
+                                <th class="p-3.5">Canary Endpoint</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tokens-table-body" class="divide-y divide-socBorder/50 font-mono"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab 3: Executive Report -->
+            <div id="tab-report" class="hidden bg-socCard border border-socBorder rounded-lg p-6 space-y-4">
+                <div class="flex justify-between items-center border-b border-socBorder pb-4">
+                    <div>
+                        <h3 class="text-base font-bold text-white">Incident Response Executive Post-Mortem</h3>
+                        <p class="text-xs text-slate-400">Auto-generated breach summary, IOC list, and remediation guidance</p>
+                    </div>
+                    <button onclick="window.print()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-white rounded border border-socBorder">
+                        🖨️ Print / Export PDF
+                    </button>
+                </div>
+                <div id="report-content" class="text-xs text-slate-300 font-mono space-y-4 bg-slate-950 p-4 rounded border border-socBorder">
+                    Loading executive report...
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Deploy Token Modal -->
+    <div id="token-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-socCard border border-socBorder rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex justify-between items-center border-b border-socBorder pb-3">
+                <h3 class="text-sm font-bold text-white">Deploy New Deception Asset</h3>
+                <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white">&times;</button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">Honeytoken Type</label>
+                    <select id="modal-type" class="w-full bg-slate-900 border border-socBorder rounded p-2 text-white">
+                        <option value="web">Web / API Canary URL</option>
+                        <option value="aws">AWS IAM Credentials (AKIA...)</option>
+                        <option value="env">Production .env File Decoy</option>
+                        <option value="git">Decoy Git Repository (.git/config)</option>
+                        <option value="pdf">Canary PDF Document</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Decoy Label</label>
+                    <input id="modal-label" type="text" placeholder="e.g. Finance-Drive-Link" class="w-full bg-slate-900 border border-socBorder rounded p-2 text-white" />
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Context Notes</label>
+                    <input id="modal-desc" type="text" placeholder="e.g. Planted in staging server /var/www" class="w-full bg-slate-900 border border-socBorder rounded p-2 text-white" />
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeModal('token-modal')" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
+                <button onclick="submitNewToken()" class="px-4 py-1.5 text-xs bg-socCrimson hover:bg-red-600 text-white rounded font-medium">Generate Decoy</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts for Leaflet & Data Ingestion -->
+    <script>
+        let map;
+        let markersLayer;
+
+        function initMap() {
+            map = L.map('attack-map', { attributionControl: false }).setView([20, 0], 2);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 18,
+                subdomains: 'abcd'
+            }).addTo(map);
+            markersLayer = L.layerGroup().addTo(map);
+        }
+
+        async function refreshData() {
+            try {
+                // Fetch stats
+                const statsRes = await fetch('/api/stats');
+                const stats = await statsRes.json();
+                document.getElementById('stat-tokens').innerText = stats.total_tokens;
+                document.getElementById('stat-incidents').innerText = stats.total_incidents;
+                document.getElementById('stat-high-threat').innerText = stats.high_threat_incidents;
+                document.getElementById('stat-attackers').innerText = stats.unique_attackers;
+                document.getElementById('token-count-badge').innerText = stats.total_tokens;
+
+                // Fetch incidents
+                const incidentsRes = await fetch('/api/incidents');
+                const incidents = await incidentsRes.json();
+                renderIncidents(incidents);
+                updateMapMarkers(incidents);
+                generateExecutiveReport(stats, incidents);
+
+                // Fetch tokens
+                const tokensRes = await fetch('/api/tokens');
+                const tokens = await tokensRes.json();
+                renderTokens(tokens);
+            } catch (err) {
+                console.error("Telemetry sync error:", err);
+            }
+        }
+
+        function updateMapMarkers(incidents) {
+            markersLayer.clearLayers();
+            incidents.forEach(inc => {
+                if (inc.geo_lat && inc.geo_lon) {
+                    const icon = L.divIcon({
+                        className: 'pulse-marker',
+                        iconSize: [12, 12]
+                    });
+                    const marker = L.marker([inc.geo_lat, inc.geo_lon], { icon }).addTo(markersLayer);
+                    marker.bindPopup(`
+                        <div style="font-family: sans-serif; font-size: 11px; color: #1e293b;">
+                            <b>🚨 Attacker IP: ${inc.attacker_ip}</b><br/>
+                            Location: ${inc.geo_city}, ${inc.geo_country}<br/>
+                            Threat Score: <b>${inc.threat_score}%</b><br/>
+                            Tool: ${inc.client_tool}
+                        </div>
+                    `);
+                }
+            });
+        }
+
+        function renderIncidents(incidents) {
+            const tbody = document.getElementById('incidents-table-body');
+            if (!incidents.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-500 font-sans">No security incidents detected. Decoys are quiet.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = incidents.map(inc => {
+                let badgeClass = "bg-slate-800 text-slate-300 border-slate-700";
+                if (inc.threat_score >= 70) badgeClass = "bg-red-500/20 text-red-400 border-red-500/40";
+                else if (inc.threat_score >= 40) badgeClass = "bg-amber-500/20 text-amber-400 border-amber-500/40";
+
+                const gpu = inc.gpu_renderer ? `<div class="text-[10px] text-cyan-400 truncate max-w-[140px]" title="${inc.gpu_renderer}">GPU: ${inc.gpu_renderer.split('/')[0]}</div>` : '';
+                const lanIp = inc.local_lan_ip ? `<div class="text-[10px] text-purple-400">LAN: ${inc.local_lan_ip}</div>` : '';
+
+                return `
+                    <tr class="hover:bg-slate-800/40 transition">
+                        <td class="p-3.5 text-slate-400">${inc.timestamp.substring(11, 19)}</td>
+                        <td class="p-3.5 font-bold text-white">
+                            ${inc.attacker_ip}
+                            <div class="text-[10px] text-slate-500 font-sans">${inc.connection_type}</div>
+                        </td>
+                        <td class="p-3.5">
+                            <span class="px-2 py-0.5 rounded text-[10px] border ${badgeClass} font-bold">${inc.threat_score}%</span>
+                        </td>
+                        <td class="p-3.5">
+                            <div class="text-slate-200">${inc.geo_city || 'Local'}, ${inc.geo_country}</div>
+                            <div class="text-[10px] text-slate-500 truncate max-w-[150px]">${inc.geo_isp}</div>
+                        </td>
+                        <td class="p-3.5">
+                            <div class="text-slate-300">${inc.client_tool}</div>
+                            ${gpu}
+                            ${lanIp}
+                        </td>
+                        <td class="p-3.5">
+                            <span class="text-socCrimson">${inc.token_id}</span>
+                        </td>
+                        <td class="p-3.5 text-right">
+                            <button onclick="isolateIP('${inc.attacker_ip}')" class="px-2.5 py-1 bg-red-950/60 hover:bg-red-900 border border-red-700 text-red-200 rounded text-[10px] transition">
+                                🛡️ Isolate IP
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderTokens(tokens) {
+            const tbody = document.getElementById('tokens-table-body');
+            if (!tokens.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-500 font-sans">No tokens deployed.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = tokens.map(t => `
+                <tr class="hover:bg-slate-800/40 transition">
+                    <td class="p-3.5 text-socCyan font-bold">${t.id}</td>
+                    <td class="p-3.5 text-amber-400 uppercase">${t.token_type}</td>
+                    <td class="p-3.5 text-white font-sans">${t.label}</td>
+                    <td class="p-3.5 font-bold text-socCrimson">${t.trigger_count}</td>
+                    <td class="p-3.5 text-slate-400">${t.created_at.substring(0, 10)}</td>
+                    <td class="p-3.5 text-slate-400 font-sans truncate max-w-[220px]">${t.metadata.canary_url || 'File Tripwire'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function generateExecutiveReport(stats, incidents) {
+            const iocs = Array.from(new Set(incidents.map(i => i.attacker_ip))).slice(0, 10);
+            const content = `
+================================================================================
+HONEYGRID SENTINEL &bull; INCIDENT RESPONSE POST-MORTEM REPORT
+Generated: ${new Date().toUTCString()}
+================================================================================
+
+1. EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+Over the current observation period, HoneyGrid deployed ${stats.total_tokens} deceptive assets across
+network endpoints, file storage, and credential stores.
+
+A total of ${stats.total_incidents} unauthorized breach/reconnaissance attempts were detected,
+originating from ${stats.unique_attackers} unique external and internal network addresses.
+${stats.high_threat_incidents} events exhibited high-threat characteristics (commercial VPNs,
+Tor routing, or datacenter exploit scripts).
+
+2. INDICATORS OF COMPROMISE (IOCs)
+--------------------------------------------------------------------------------
+Active Adversary IPs:
+${iocs.map(ip => `  • ${ip}`).join('\n') || '  • None detected'}
+
+MITRE ATT&CK Techniques Identified:
+  • T1552.001 - Unsecured Credentials in Files
+  • T1083 - File and Directory Discovery
+  • T1082 - System Information Discovery
+
+3. ROOT CAUSE & SCOPE ANALYSIS
+--------------------------------------------------------------------------------
+Unauthorized activity was recorded on canary endpoints. Decoy credentials were
+harvested from simulated target locations. All attempted HTTP/API calls were
+intercepted by the Sentinel listener, unmasking attacker hardware and network origin.
+
+4. REMEDIATION & CONTAINMENT RECOMMENDATIONS
+--------------------------------------------------------------------------------
+[x] Automated host isolation triggered via Windows Firewall rules.
+[x] Revoke any compromised sessions and audit adjacent authentication logs.
+[x] Enforce MFA across all external identity providers.
+            `;
+            document.getElementById('report-content').innerText = content.trim();
+        }
+
+        async function isolateIP(ip) {
+            if (!confirm(`Trigger SOAR containment playbook to block ${ip} via Windows Firewall?`)) return;
+            const res = await fetch('/api/contain/isolate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip: ip })
+            });
+            const data = await res.json();
+            alert(data.message);
+        }
+
+        async function submitNewToken() {
+            const type = document.getElementById('modal-type').value;
+            const label = document.getElementById('modal-label').value || 'Web-Decoy';
+            const desc = document.getElementById('modal-desc').value || '';
+            const res = await fetch('/api/tokens/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token_type: type, label: label, description: desc })
+            });
+            if (res.ok) {
+                closeModal('token-modal');
+                refreshData();
+            }
+        }
+
+        function switchTab(tab) {
+            ['incidents', 'tokens', 'report'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`tab-btn-${t}`).className = "px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200";
+            });
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-btn-${tab}`).className = "px-4 py-2 text-sm font-medium border-b-2 border-socCrimson text-white";
+        }
+
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        window.onload = () => {
+            initMap();
+            refreshData();
+            setInterval(refreshData, 10000); // Poll every 10 seconds
+        };
+    </script>
+</body>
+</html>

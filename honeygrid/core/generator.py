@@ -103,3 +103,68 @@ def create_honeyfile_tripwire(filepath: str, label: str, description: str = "") 
     )
     save_token(token)
     return token
+
+def create_git_honeytoken(target_dir: str, label: str = "Internal-Git-Decoy") -> Tuple[Token, str]:
+    """
+    Generates a decoy Git repository containing a canary remote URL in .git/config.
+    When an attacker enters the repo and runs 'git pull' or 'git fetch', the canary trips.
+    """
+    token_id = generate_unique_token_id("git")
+    canary_url = f"{settings.HONEYGRID_BASE_URL}/t/{token_id}?source=git_fetch"
+    
+    repo_path = Path(target_dir)
+    git_dir = repo_path / ".git"
+    git_dir.mkdir(parents=True, exist_ok=True)
+    
+    git_config_content = f"""[core]
+\trepositoryformatversion = 0
+\tfilemode = false
+\tbare = false
+\tlogallrefupdates = true
+[remote "origin"]
+\turl = {canary_url}
+\tfetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+\tremote = origin
+\tmerge = refs/heads/main
+"""
+    with open(git_dir / "config", "w") as f:
+        f.write(git_config_content)
+        
+    with open(repo_path / "README.md", "w") as f:
+        f.write("# Internal Infrastructure Automation & Deployment Scripts\nCONFIDENTIAL - Property of Corporate DevSecOps.\n")
+        
+    token = Token(
+        id=token_id,
+        token_type="git_repo",
+        label=label,
+        description=f"Decoy Git repository at {repo_path.resolve()}",
+        created_at=datetime.now(timezone.utc).isoformat(),
+        metadata={"canary_url": canary_url, "repo_path": str(repo_path.resolve())}
+    )
+    save_token(token)
+    return token, canary_url
+
+def create_keepass_honeytoken(output_path: str, label: str = "Corporate-KeePass-Vault") -> Tuple[Token, str]:
+    """
+    Generates an authentic-looking KeePass 2.x (.kdbx) password vault database.
+    Registers the path with the honeyfile tripwire monitor.
+    """
+    out_file = Path(output_path)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    # KeePass 2.x KDBX File Header Magic Bytes: 0x9AA2D903, 0xB54BFB67
+    kdbx_signature = b"\x03\xd9\xa2\x9a\x67\xfb\x4b\xb5\x00\x00\x04\x00"
+    # Seed plausible random binary structure
+    pseudo_encrypted_data = secrets.token_bytes(4096)
+    
+    with open(out_file, "wb") as f:
+        f.write(kdbx_signature + pseudo_encrypted_data)
+        
+    token = create_honeyfile_tripwire(
+        str(out_file),
+        label=label,
+        description=f"Decoy KeePass Database Vault at {out_file.resolve()}"
+    )
+    return token, str(out_file.resolve())
+

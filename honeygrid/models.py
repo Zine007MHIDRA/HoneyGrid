@@ -39,6 +39,30 @@ class IncidentEvent(BaseModel):
     geo_lat: Optional[float] = None
     geo_lon: Optional[float] = None
     
+    # Threat Intelligence
+    threat_score: int = 15
+    connection_type: str = "Unknown"
+    is_vpn_proxy: bool = False
+    is_tor: bool = False
+    
+    # Client Hardware & Environment Fingerprint (WebGL, WebRTC, Screen)
+    gpu_renderer: Optional[str] = None
+    screen_res: Optional[str] = None
+    cpu_cores: Optional[int] = None
+    device_memory: Optional[int] = None
+    local_lan_ip: Optional[str] = None
+    client_timezone: Optional[str] = None
+
     # Raw forensics
     raw_headers: Optional[Dict[str, str]] = None
     mitre_technique: str = "T1552: Unsecured Credentials"
+
+class BrowserTelemetry(BaseModel):
+    gpu_renderer: Optional[str] = None
+    screen_res: Optional[str] = None
+    cpu_cores: Optional[int] = None
+    device_memory: Optional[int] = None
+    local_lan_ip: Optional[str] = None
+    client_timezone: Optional[str] = None
+    platform: Optional[str] = None
+

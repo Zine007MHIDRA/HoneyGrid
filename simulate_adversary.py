@@ -97,15 +97,35 @@ def run_simulation():
     except Exception as e:
         console.print(f"  [red]Phase 3 error: {e}[/red]\n")
 
+    time.sleep(1.5)
+
+    # Scenario D: Simulated Browser Hardware Telemetry Beacon
+    console.print("[bold yellow]⚡ Phase 4: Attacker Opens Canary in Browser (Hardware Fingerprinting)[/bold yellow]")
+    try:
+        telemetry_url = f"{settings.HONEYGRID_BASE_URL}/t/{token.id}/telemetry"
+        telemetry_payload = {
+            "gpu_renderer": "NVIDIA GeForce RTX 4090 Direct3D12",
+            "screen_res": "2560x1440 (DPR: 1.5)",
+            "cpu_cores": 16,
+            "device_memory": 32,
+            "local_lan_ip": "192.168.1.185",
+            "client_timezone": "America/New_York",
+            "platform": "Win32"
+        }
+        resp = requests.post(telemetry_url, json=telemetry_payload, timeout=5)
+        console.print(f"  [dim]-> Telemetry beaconed -> HTTP {resp.status_code}[/dim]")
+        console.print("  [green]✔ Hardware profile captured: GPU, Screen, Cores & WebRTC LAN leak![/green]\n")
+    except Exception as e:
+        console.print(f"  [red]Phase 4 error: {e}[/red]\n")
+
     console.print(Panel(
         "[bold green]Simulation Complete![/bold green]\n\n"
-        "Check your Discord channel now!\n"
+        "Check your Discord channel and Web Dashboard!\n"
         "You should see the incident alerts detailing:\n"
         "• Exact Attacker IPs (including unmasked proxy IP)\n"
-        "• Client tools detected (cURL, Python bot, Scanner)\n"
-        "• MITRE ATT&CK technique tags and coordinates\n\n"
-        "You can also view stored incidents locally with:\n"
-        "[cyan]python cli.py list-incidents[/cyan]",
+        "• Threat Scores (VPN/Datacenter detection)\n"
+        "• Client tools & hardware (GPU, screen, WebRTC LAN)\n"
+        "• Live World Attack Map markers at [cyan]http://localhost:8000/dashboard[/cyan]",
         title="🎯 Red Team Verification Passed",
         border_style="green"
     ))

