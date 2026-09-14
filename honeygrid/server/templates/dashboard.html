@@ -227,9 +227,10 @@
 
         function initMap() {
             map = L.map('attack-map', { attributionControl: false }).setView([20, 0], 2);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=cb1_3l0n_1_cb31a2b53480eee66c2c97ae', {
                 maxZoom: 18,
-                subdomains: 'abcd'
+                subdomains: 'abcd',
+                attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
             }).addTo(map);
             markersLayer = L.layerGroup().addTo(map);
         }
