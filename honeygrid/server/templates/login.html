@@ -157,14 +157,6 @@
                         <span id="auth-alert-msg" class="flex-1 font-sans leading-relaxed"></span>
                     </div>
 
-                    <!-- Admin Email Detection Hint -->
-                    <div id="admin-detected-badge" class="hidden mb-4 p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs flex items-center gap-2">
-                        <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                        <span class="font-mono text-[11px]">MASTER ADMIN PRIVILEGES RECOGNIZED</span>
-                    </div>
-
                     <!-- Form -->
                     <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
                         <div>
@@ -176,8 +168,7 @@
                                     id="auth-email" 
                                     type="email" 
                                     required 
-                                    placeholder="analyst@internal.corp or zine.mhidra@gmail.com"
-                                    oninput="checkAdminEmail(this.value)"
+                                    placeholder="operator@company.com"
                                     class="w-full input-box px-3.5 py-2.5 rounded-xl text-sm font-sans" 
                                 />
                             </div>
@@ -278,15 +269,6 @@
                 btnLogin.className = "flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200";
                 btnText.innerText = "Initialize Operator Account";
                 regTerms.classList.remove('hidden');
-            }
-        }
-
-        function checkAdminEmail(email) {
-            const adminBadge = document.getElementById('admin-detected-badge');
-            if (email.trim().toLowerCase() === 'zine.mhidra@gmail.com') {
-                adminBadge.classList.remove('hidden');
-            } else {
-                adminBadge.classList.add('hidden');
             }
         }
 

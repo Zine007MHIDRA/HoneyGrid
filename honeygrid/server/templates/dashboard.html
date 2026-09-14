@@ -690,7 +690,7 @@
                 tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500 font-sans text-xs">No deception assets deployed in your workspace. Click "Deploy Deception Trap" to plant your first canary.</td></tr>';
                 return;
             }
-            const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.email?.toLowerCase() === 'zine.mhidra@gmail.com');
+            const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.is_admin);
             tbody.innerHTML = tokens.map(t => {
                 const canaryUrl = t.metadata?.canary_url || '';
                 const ownerTag = (isAdmin && t.owner_email) ? `<div class="text-[10px] text-slate-500 font-sans">Owner: ${t.owner_email}</div>` : '';
@@ -894,10 +894,11 @@ interfaces without revealing surveillance mechanisms to the attacker.
                     return false;
                 }
                 currentUser = data.user;
+                currentUser.is_admin = data.is_admin;
                 document.getElementById('user-email-display').innerText = currentUser.email;
                 document.getElementById('user-email-display').title = currentUser.email;
 
-                const isAdmin = currentUser.role === 'admin' || currentUser.email.toLowerCase() === 'zine.mhidra@gmail.com';
+                const isAdmin = currentUser.role === 'admin' || data.is_admin;
                 if (isAdmin) {
                     document.getElementById('user-role-badge').classList.remove('hidden');
                     document.getElementById('tenant-scope-admin-badge').classList.remove('hidden');
