@@ -42,6 +42,9 @@
         }
         #attack-map { height: 380px; width: 100%; border-radius: 0.5rem; position: relative; z-index: 1; }
         .leaflet-container { background: #0f172a !important; z-index: 1 !important; }
+        .leaflet-pane { z-index: 2 !important; }
+        .leaflet-top, .leaflet-bottom { z-index: 3 !important; }
+        #token-modal { z-index: 999999 !important; }
     </style>
 </head>
 <body class="text-slate-200 min-h-screen">
@@ -187,7 +190,7 @@
     </main>
 
     <!-- Deploy Token Modal -->
-    <div id="token-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4">
+    <div id="token-modal" style="display: none; z-index: 999999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
         <div class="bg-socCard border border-socBorder rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl relative z-10">
             <div class="flex justify-between items-center border-b border-socBorder pb-3">
                 <h3 class="text-sm font-bold text-white">Deploy New Deception Asset</h3>
@@ -227,10 +230,10 @@
 
         function initMap() {
             map = L.map('attack-map', { attributionControl: false }).setView([20, 0], 2);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=cb1_3l0n_1_cb31a2b53480eee66c2c97ae', {
-                maxZoom: 18,
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_3l0n_1_cb31a2b53480eee66c2c97ae', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
                 subdomains: 'abcd',
-                attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
+                maxZoom: 20
             }).addTo(map);
             markersLayer = L.layerGroup().addTo(map);
         }
@@ -426,8 +429,14 @@ intercepted by the Sentinel listener, unmasking attacker hardware and network or
             document.getElementById(`tab-btn-${tab}`).className = "px-4 py-2 text-sm font-medium border-b-2 border-socCrimson text-white";
         }
 
-        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        function openModal(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'flex';
+        }
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        }
 
         window.onload = () => {
             initMap();
