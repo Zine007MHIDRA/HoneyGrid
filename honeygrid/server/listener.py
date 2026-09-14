@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, Request, Response, BackgroundTasks
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from honeygrid.config import settings
 from honeygrid.database import (
     init_db, get_token, record_incident, list_tokens, list_incidents,
@@ -32,7 +33,19 @@ app = FastAPI(
 )
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 TRANSPARENT_GIF_BYTES = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+
+@app.get("/api/logo")
+async def get_brand_logo():
+    logo_file = STATIC_DIR / "logo.jpg"
+    if logo_file.exists():
+        return FileResponse(str(logo_file), media_type="image/jpeg")
+    return Response(status_code=404)
 
 def get_template(name: str) -> str:
     candidate_paths = [
