@@ -14,7 +14,7 @@ from honeygrid.database import (
     create_session, get_user_by_session, delete_session
 )
 from honeygrid.models import IncidentEvent, Token, BrowserTelemetry, User, UserRegister, UserLogin
-from honeygrid.core.auth import hash_password, verify_password
+from honeygrid.core.auth import hash_password, verify_password, generate_captcha, verify_captcha
 from honeygrid.core.fingerprint import extract_client_ip, identify_client_tool
 from honeygrid.core.geo import lookup_ip_geolocation
 from honeygrid.core.threat_intel import analyze_ip_threat
@@ -169,8 +169,27 @@ async def health_check():
 # Authentication & Identity Endpoints
 # -------------------------------------------------------------
 
+@app.get("/api/auth/captcha")
+async def api_captcha():
+    """Generates a dynamic visual verification challenge with a signed HMAC token."""
+    code, svg, token = generate_captcha(settings.HONEYGRID_SECRET_KEY)
+    return {
+        "status": "success",
+        "captcha_token": token,
+        "captcha_svg": svg,
+        "expires_in": 300
+    }
+
 @app.post("/api/auth/register")
 async def api_register(data: UserRegister):
+    # 1. Anti-bot honeypot check
+    if data.hp_decoy_field:
+        return JSONResponse({"status": "error", "message": "Automated bot activity detected and blocked."}, status_code=403)
+
+    # 2. CAPTCHA verification
+    if not data.captcha_answer or not data.captcha_token or not verify_captcha(data.captcha_answer, data.captcha_token, settings.HONEYGRID_SECRET_KEY):
+        return JSONResponse({"status": "error", "message": "Security verification code is incorrect or expired. Please reload challenge."}, status_code=400)
+
     email = data.email.strip().lower()
     password = data.password
     if not email or "@" not in email:
@@ -208,6 +227,14 @@ async def api_register(data: UserRegister):
 
 @app.post("/api/auth/login")
 async def api_login(data: UserLogin):
+    # 1. Anti-bot honeypot check
+    if data.hp_decoy_field:
+        return JSONResponse({"status": "error", "message": "Automated bot activity detected and blocked."}, status_code=403)
+
+    # 2. CAPTCHA verification
+    if not data.captcha_answer or not data.captcha_token or not verify_captcha(data.captcha_answer, data.captcha_token, settings.HONEYGRID_SECRET_KEY):
+        return JSONResponse({"status": "error", "message": "Security verification code is incorrect or expired. Please reload challenge."}, status_code=400)
+
     email = data.email.strip().lower()
     password = data.password
     if not email or not password:
@@ -228,7 +255,8 @@ async def api_login(data: UserLogin):
         created_at=record["created_at"]
     )
     
-    session_token = create_session(user.id, expire_hours=settings.SESSION_EXPIRE_HOURS)
+    expire_hours = settings.SESSION_EXPIRE_HOURS if data.remember_me else 24
+    session_token = create_session(user.id, expire_hours=expire_hours)
     resp = JSONResponse({
         "status": "success",
         "message": "Identity authenticated",
@@ -238,7 +266,7 @@ async def api_login(data: UserLogin):
     resp.set_cookie(
         key=settings.SESSION_COOKIE_NAME,
         value=session_token,
-        max_age=settings.SESSION_EXPIRE_HOURS * 3600,
+        max_age=expire_hours * 3600,
         httponly=True,
         samesite="lax",
         secure=False

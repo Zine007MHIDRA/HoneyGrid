@@ -15,10 +15,17 @@ class User(BaseModel):
 class UserRegister(BaseModel):
     email: str
     password: str
+    captcha_answer: Optional[str] = None
+    captcha_token: Optional[str] = None
+    hp_decoy_field: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: str
     password: str
+    captcha_answer: Optional[str] = None
+    captcha_token: Optional[str] = None
+    hp_decoy_field: Optional[str] = None
+    remember_me: Optional[bool] = True
 
 class TokenCreate(BaseModel):
     token_type: str = Field(..., description="Type of token: web, aws_key, db_conn, env_file, canary_pdf, honeyfile")

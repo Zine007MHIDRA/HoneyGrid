@@ -158,7 +158,10 @@
                     </div>
 
                     <!-- Form -->
-                    <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+                    <form id="auth-form" onsubmit="handleAuthSubmit(event)" method="POST" class="space-y-4">
+                        <!-- Deception Bot Honeypot Trap (Automated crawlers fill this and get blocked) -->
+                        <input type="text" name="hp_decoy_field" id="hp-decoy-field" tabindex="-1" autocomplete="off" style="display:none !important; position:absolute; left:-9999px;" aria-hidden="true" />
+
                         <div>
                             <label class="block text-xs font-medium text-slate-300 mb-1.5 font-sans">
                                 Corporate or Personal Email
@@ -166,7 +169,9 @@
                             <div class="relative">
                                 <input 
                                     id="auth-email" 
+                                    name="email"
                                     type="email" 
+                                    autocomplete="username"
                                     required 
                                     placeholder="operator@company.com"
                                     class="w-full input-box px-3.5 py-2.5 rounded-xl text-sm font-sans" 
@@ -184,7 +189,9 @@
                             <div class="relative">
                                 <input 
                                     id="auth-password" 
+                                    name="password"
                                     type="password" 
+                                    autocomplete="current-password"
                                     required 
                                     placeholder="••••••••••••" 
                                     class="w-full input-box px-3.5 py-2.5 rounded-xl text-sm font-mono pr-10" 
@@ -200,6 +207,57 @@
                                     </svg>
                                 </button>
                             </div>
+                        </div>
+
+                        <!-- Anti-Bot Sentinel CAPTCHA -->
+                        <div class="space-y-1.5 pt-1">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-medium text-slate-300 font-sans flex items-center gap-1.5">
+                                    <svg class="w-3.5 h-3.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                    </svg>
+                                    <span>Anti-Bot Verification</span>
+                                </label>
+                                <span class="text-[10px] text-slate-500 font-mono">HMAC Challenge</span>
+                            </div>
+                            
+                            <div class="flex items-center gap-2">
+                                <div id="captcha-svg-container" class="rounded-xl border border-white/10 bg-[#090d16] flex items-center justify-center flex-1 h-12 overflow-hidden shadow-inner cursor-pointer" onclick="loadCaptcha()" title="Click to refresh challenge">
+                                    <div class="text-slate-500 text-xs font-mono animate-pulse flex items-center gap-2">
+                                        <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                        </svg>
+                                        <span>Generating CAPTCHA...</span>
+                                    </div>
+                                </div>
+                                <button type="button" onclick="loadCaptcha()" title="Regenerate CAPTCHA" class="h-12 w-12 shrink-0 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] text-slate-300 hover:text-white flex items-center justify-center transition-all active:scale-95 group">
+                                    <svg id="captcha-reload-icon" class="w-4 h-4 text-slate-400 group-hover:text-white group-hover:rotate-180 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <input 
+                                id="captcha-input" 
+                                name="captcha_answer"
+                                type="text" 
+                                required 
+                                maxlength="5"
+                                autocomplete="off"
+                                autocorrect="off"
+                                spellcheck="false"
+                                placeholder="Type 5-character code above" 
+                                class="w-full input-box px-3.5 py-2 rounded-xl text-sm font-mono tracking-widest text-center uppercase placeholder:tracking-normal placeholder:font-sans placeholder:normal-case placeholder:text-slate-500" 
+                            />
+                        </div>
+
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-400 hover:text-slate-300 transition-colors">
+                                <input type="checkbox" id="remember-me" checked class="w-4 h-4 rounded bg-black/50 border border-white/10 text-rose-600 focus:ring-0 focus:ring-offset-0 transition cursor-pointer" />
+                                <span class="font-sans">Remember this login</span>
+                            </label>
+                            <span class="text-[10px] text-slate-500 font-mono">7-Day Session</span>
                         </div>
 
                         <div id="register-terms" class="hidden text-[11px] text-slate-400 leading-relaxed font-sans pt-1">
@@ -249,6 +307,33 @@
     <!-- Logic Script -->
     <script>
         let currentAuthMode = 'login'; // 'login' or 'register'
+        let currentCaptchaToken = '';
+
+        async function loadCaptcha() {
+            const container = document.getElementById('captcha-svg-container');
+            const reloadIcon = document.getElementById('captcha-reload-icon');
+            if (reloadIcon) reloadIcon.classList.add('rotate-180');
+            
+            try {
+                const res = await fetch('/api/auth/captcha');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        currentCaptchaToken = data.captcha_token;
+                        container.innerHTML = data.captcha_svg;
+                        const input = document.getElementById('captcha-input');
+                        if (input) input.value = '';
+                    }
+                }
+            } catch (err) {
+                console.error("CAPTCHA load error:", err);
+                container.innerHTML = '<span class="text-rose-400 text-xs font-mono">Error generating challenge. Click reload.</span>';
+            } finally {
+                setTimeout(() => {
+                    if (reloadIcon) reloadIcon.classList.remove('rotate-180');
+                }, 500);
+            }
+        }
 
         function switchAuthTab(mode) {
             currentAuthMode = mode;
@@ -258,17 +343,20 @@
             const btnRegister = document.getElementById('tab-btn-register');
             const btnText = document.getElementById('btn-text');
             const regTerms = document.getElementById('register-terms');
+            const pwdInput = document.getElementById('auth-password');
 
             if (mode === 'login') {
                 btnLogin.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-md shadow-rose-950/40";
                 btnRegister.className = "flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200";
                 btnText.innerText = "Authenticate to Sentinel SOC";
                 regTerms.classList.add('hidden');
+                if (pwdInput) pwdInput.autocomplete = "current-password";
             } else {
                 btnRegister.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-md shadow-rose-950/40";
                 btnLogin.className = "flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200";
                 btnText.innerText = "Initialize Operator Account";
                 regTerms.classList.remove('hidden');
+                if (pwdInput) pwdInput.autocomplete = "new-password";
             }
         }
 
@@ -299,6 +387,9 @@
 
             const email = document.getElementById('auth-email').value.trim();
             const password = document.getElementById('auth-password').value;
+            const captchaAnswer = document.getElementById('captcha-input').value.trim().toUpperCase();
+            const decoyHoneypot = document.getElementById('hp-decoy-field').value;
+            const rememberMe = document.getElementById('remember-me').checked;
 
             if (!email || !password) {
                 showAlert('Please provide both an email and password.');
@@ -307,6 +398,11 @@
 
             if (password.length < 6) {
                 showAlert('Password must be at least 6 characters.');
+                return;
+            }
+
+            if (!captchaAnswer) {
+                showAlert('Please enter the 5-character verification challenge.');
                 return;
             }
 
@@ -323,7 +419,14 @@
                 const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email, password: password })
+                    body: JSON.stringify({
+                        email: email,
+                        password: password,
+                        captcha_answer: captchaAnswer,
+                        captcha_token: currentCaptchaToken,
+                        hp_decoy_field: decoyHoneypot,
+                        remember_me: rememberMe
+                    })
                 });
 
                 const data = await res.json();
@@ -332,18 +435,21 @@
                     btnText.innerText = 'Access Granted. Redirecting...';
                     window.location.href = data.redirect || '/dashboard';
                 } else {
-                    showAlert(data.message || data.detail || 'Authentication failed. Please verify credentials.');
+                    showAlert(data.message || data.detail || 'Authentication failed. Please check credentials and verification code.');
                     submitBtn.disabled = false;
                     btnSpinner.classList.add('hidden');
+                    // Automatically refresh CAPTCHA challenge after failure
+                    loadCaptcha();
                 }
             } catch (err) {
                 showAlert('Network or gateway error: ' + err.message);
                 submitBtn.disabled = false;
                 btnSpinner.classList.add('hidden');
+                loadCaptcha();
             }
         }
 
-        // On page load, verify if user already has an active session
+        // On page load, verify session and load anti-bot challenge
         window.onload = async () => {
             try {
                 const res = await fetch('/api/auth/me');
@@ -351,9 +457,13 @@
                     const data = await res.json();
                     if (data.authenticated) {
                         window.location.href = '/dashboard';
+                        return;
                     }
                 }
             } catch (e) {}
+            
+            // Load initial CAPTCHA challenge
+            loadCaptcha();
         };
     </script>
 </body>
