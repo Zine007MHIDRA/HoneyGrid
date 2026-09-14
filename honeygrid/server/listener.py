@@ -50,12 +50,54 @@ def get_template(name: str) -> str:
     return ""
 
 
-def process_incident_telemetry(event: IncidentEvent):
-    """Background task to record incident and dispatch Discord alert."""
-    token = get_token(event.token_id)
-    record_incident(event)
-    send_discord_alert(event, token)
-    print(f"[!] TRIPPED: Token '{event.token_id}' by IP {event.attacker_ip} [{event.connection_type} - Threat: {event.threat_score}%]")
+def process_incident_async(
+    token_id: str,
+    raw_ip: str,
+    is_local: bool,
+    client_tool: str,
+    user_agent: str,
+    http_method: str,
+    request_path: str,
+    query_params: str,
+    headers_dict: dict
+):
+    """Background task to resolve GeoIP, threat intel, record incident and dispatch Discord alert."""
+    try:
+        geo = lookup_ip_geolocation(raw_ip)
+        reported_ip = geo.get("query_ip") if is_local and geo.get("query_ip") else raw_ip
+        threat_profile = analyze_ip_threat(reported_ip, geo)
+
+        event = IncidentEvent(
+            token_id=token_id,
+            attacker_ip=reported_ip,
+            is_local_ip=is_local,
+            client_tool=client_tool,
+            user_agent=user_agent,
+            http_method=http_method,
+            request_path=request_path,
+            query_params=query_params,
+            geo_country=geo.get("country", "Unknown"),
+            geo_city=geo.get("city", "Unknown"),
+            geo_region=geo.get("region", "Unknown"),
+            geo_isp=geo.get("isp", "Unknown"),
+            geo_asn=geo.get("asn", "Unknown"),
+            geo_lat=geo.get("lat"),
+            geo_lon=geo.get("lon"),
+            threat_score=threat_profile.get("threat_score", 15),
+            connection_type=threat_profile.get("connection_type", "Unknown"),
+            is_vpn_proxy=threat_profile.get("is_vpn_proxy", False),
+            is_tor=threat_profile.get("is_tor", False),
+            raw_headers=headers_dict,
+            mitre_technique="T1552: Unsecured Credentials"
+        )
+        
+        token = get_token(token_id)
+        record_incident(event)
+        send_discord_alert(event, token)
+        print(f"[!] TRIPPED: Token '{token_id}' by IP {reported_ip} [{threat_profile.get('connection_type')} - Threat: {threat_profile.get('threat_score')}%]")
+    except Exception as e:
+        print(f"[!] Error in background incident processing: {e}")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index_root(request: Request):
@@ -140,36 +182,19 @@ async def trigger_canary(
     user_agent = headers_dict.get("user-agent", "")
     client_tool = identify_client_tool(user_agent)
     
-    # Geolocation & Threat Analysis
-    geo = lookup_ip_geolocation(raw_ip)
-    reported_ip = geo.get("query_ip") if is_local and geo.get("query_ip") else raw_ip
-    threat_profile = analyze_ip_threat(reported_ip, geo)
-
-    event = IncidentEvent(
+    # Enqueue heavy telemetry resolution, GeoIP, threat intel, and Discord alerting to background
+    background_tasks.add_task(
+        process_incident_async,
         token_id=token_id,
-        attacker_ip=reported_ip,
-        is_local_ip=is_local,
+        raw_ip=raw_ip,
+        is_local=is_local,
         client_tool=client_tool,
         user_agent=user_agent,
         http_method=request.method,
         request_path=str(request.url.path),
         query_params=str(request.url.query),
-        geo_country=geo.get("country", "Unknown"),
-        geo_city=geo.get("city", "Unknown"),
-        geo_region=geo.get("region", "Unknown"),
-        geo_isp=geo.get("isp", "Unknown"),
-        geo_asn=geo.get("asn", "Unknown"),
-        geo_lat=geo.get("lat"),
-        geo_lon=geo.get("lon"),
-        threat_score=threat_profile["threat_score"],
-        connection_type=threat_profile["connection_type"],
-        is_vpn_proxy=threat_profile["is_vpn_proxy"],
-        is_tor=threat_profile["is_tor"],
-        raw_headers=headers_dict,
-        mitre_technique="T1552: Unsecured Credentials"
+        headers_dict=headers_dict
     )
-    
-    background_tasks.add_task(process_incident_telemetry, event)
 
     accept = headers_dict.get("accept", "")
     

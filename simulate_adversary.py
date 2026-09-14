@@ -56,11 +56,14 @@ def run_simulation():
             "User-Agent": "curl/8.4.0",
             "Accept": "*/*"
         }
-        resp = requests.get(canary_url, headers=headers, timeout=5)
+        resp = requests.get(canary_url, headers=headers, timeout=15)
         console.print(f"  [dim]-> Response HTTP {resp.status_code}[/dim] (Attacker receives expected error, undetected)")
         console.print("  [green]✔ Telemetry captured! Sent to Discord.[/green]\n")
     except requests.exceptions.ConnectionError:
         console.print("  [bold red]✖ Connection refused![/bold red] Make sure the listener is running: [cyan]python cli.py listen[/cyan]\n")
+        return
+    except requests.exceptions.ReadTimeout:
+        console.print("  [yellow]⚠ Read timeout (server took longer than 15s to reply).[/yellow]\n")
         return
 
     time.sleep(1.5)
@@ -74,7 +77,7 @@ def run_simulation():
             "X-Forwarded-For": "198.51.100.77",
             "Accept": "application/json"
         }
-        resp = requests.post(canary_url, headers=headers, timeout=5)
+        resp = requests.post(canary_url, headers=headers, timeout=15)
         console.print(f"  [dim]-> Response HTTP {resp.status_code}[/dim]")
         console.print("  [green]✔ Proxy unmasked! Extracted Public IP: [bold red]198.51.100.77[/bold red][/green]")
         console.print("  [green]✔ Discord alert triggered with full IP details and maps link.[/green]\n")
@@ -91,7 +94,7 @@ def run_simulation():
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Scanner/2026",
             "Accept": "text/plain"
         }
-        resp = requests.get(env_url, headers=headers, timeout=5)
+        resp = requests.get(env_url, headers=headers, timeout=15)
         console.print(f"  [dim]-> Probed {env_url} -> Response HTTP {resp.status_code}[/dim]")
         console.print("  [green]✔ Scanner trap sprung! Sent to Discord.[/green]\n")
     except Exception as e:
@@ -112,7 +115,7 @@ def run_simulation():
             "client_timezone": "America/New_York",
             "platform": "Win32"
         }
-        resp = requests.post(telemetry_url, json=telemetry_payload, timeout=5)
+        resp = requests.post(telemetry_url, json=telemetry_payload, timeout=15)
         console.print(f"  [dim]-> Telemetry beaconed -> HTTP {resp.status_code}[/dim]")
         console.print("  [green]✔ Hardware profile captured: GPU, Screen, Cores & WebRTC LAN leak![/green]\n")
     except Exception as e:

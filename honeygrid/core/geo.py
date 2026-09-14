@@ -3,11 +3,16 @@ from typing import Dict, Any, Optional
 from honeygrid.config import settings
 from honeygrid.core.fingerprint import is_private_ip
 
+_GEO_CACHE: Dict[str, Dict[str, Any]] = {}
+
 def lookup_ip_geolocation(ip_address: str, fallback_to_public: bool = True) -> Dict[str, Any]:
     """
     Looks up geolocation and ISP/ASN data for a given IP address using ip-api.com.
-    Returns a dict with country, city, region, isp, asn, lat, lon.
+    Results are cached in-memory to prevent duplicate requests and API rate limits.
     """
+    if ip_address in _GEO_CACHE:
+        return _GEO_CACHE[ip_address]
+
     default_geo = {
         "country": "Localhost / Internal Subnet",
         "city": "Private Network",
@@ -37,7 +42,7 @@ def lookup_ip_geolocation(ip_address: str, fallback_to_public: bool = True) -> D
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "success":
-                return {
+                res = {
                     "country": data.get("country", "Unknown"),
                     "city": data.get("city", "Unknown"),
                     "region": data.get("regionName", "Unknown"),
@@ -47,7 +52,10 @@ def lookup_ip_geolocation(ip_address: str, fallback_to_public: bool = True) -> D
                     "lon": data.get("lon"),
                     "query_ip": data.get("query", ip_address)
                 }
+                _GEO_CACHE[ip_address] = res
+                return res
     except Exception:
         pass
 
+    _GEO_CACHE[ip_address] = default_geo
     return default_geo
