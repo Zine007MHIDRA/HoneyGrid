@@ -9,9 +9,12 @@ from fastapi.staticfiles import StaticFiles
 from honeygrid.config import settings
 from honeygrid.database import (
     init_db, get_token, record_incident, list_tokens, list_incidents,
-    get_dashboard_stats, update_incident_telemetry
+    get_dashboard_stats, update_incident_telemetry,
+    create_user, get_user_by_email, get_user_auth_record_by_email, get_user_by_id,
+    create_session, get_user_by_session, delete_session
 )
-from honeygrid.models import IncidentEvent, Token, BrowserTelemetry
+from honeygrid.models import IncidentEvent, Token, BrowserTelemetry, User, UserRegister, UserLogin
+from honeygrid.core.auth import hash_password, verify_password
 from honeygrid.core.fingerprint import extract_client_ip, identify_client_tool
 from honeygrid.core.geo import lookup_ip_geolocation
 from honeygrid.core.threat_intel import analyze_ip_threat
@@ -28,7 +31,7 @@ init_db()
 
 app = FastAPI(
     title="HoneyGrid Sentinel",
-    description="Deception Sentinel & Incident Response SOC Service",
+    description="Deception Sentinel & Multi-Tenant Incident Response SOC Service",
     version="2.0.0"
 )
 
@@ -62,6 +65,16 @@ def get_template(name: str) -> str:
                 pass
     return ""
 
+def get_current_user(request: Request) -> Optional[User]:
+    """Resolves authenticated user from HttpOnly session cookie or Authorization header."""
+    session_token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    if not session_token:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            session_token = auth_header[7:].strip()
+    if not session_token:
+        return None
+    return get_user_by_session(session_token)
 
 def process_incident_async(
     token_id: str,
@@ -111,18 +124,38 @@ def process_incident_async(
     except Exception as e:
         print(f"[!] Error in background incident processing: {e}")
 
+# -------------------------------------------------------------
+# Web Navigation Routes (Portal & Dashboard)
+# -------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
 async def index_root(request: Request):
-    """Redirects web visitors to the interactive SOC dashboard."""
+    """Directs web users to the dashboard if authenticated, otherwise to the login portal."""
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
-        return RedirectResponse(url="/dashboard")
+        user = get_current_user(request)
+        if user:
+            return RedirectResponse(url="/dashboard", status_code=302)
+        return RedirectResponse(url="/login", status_code=302)
     return JSONResponse({"service": "HoneyGrid Sentinel SOC", "status": "active", "version": "2.0.0"})
 
+@app.get("/login", response_class=HTMLResponse)
+async def login_portal(request: Request):
+    """Serves the separate, dedicated HoneyGrid Sentinel Login Portal."""
+    user = get_current_user(request)
+    if user:
+        return RedirectResponse(url="/dashboard", status_code=302)
+    html = get_template("login.html")
+    if not html:
+        return HTMLResponse("<h1>HoneyGrid Login Portal template not found</h1>", status_code=500)
+    return HTMLResponse(html)
+
 @app.get("/dashboard", response_class=HTMLResponse)
-async def soc_dashboard():
-    """Serves the Dark-Mode Incident Response Dashboard."""
+async def soc_dashboard(request: Request):
+    """Serves the Dark-Mode Incident Response Dashboard, guarded by authentication."""
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
     html = get_template("dashboard.html")
     if not html:
         return HTMLResponse("<h1>HoneyGrid Dashboard template not found</h1>", status_code=500)
@@ -133,43 +166,152 @@ async def health_check():
     return {"status": "active", "service": "HoneyGrid Sentinel SOC"}
 
 # -------------------------------------------------------------
-# REST API Endpoints for SOC Dashboard & External Integrations
+# Authentication & Identity Endpoints
+# -------------------------------------------------------------
+
+@app.post("/api/auth/register")
+async def api_register(data: UserRegister):
+    email = data.email.strip().lower()
+    password = data.password
+    if not email or "@" not in email:
+        return JSONResponse({"status": "error", "message": "Valid corporate or personal email required"}, status_code=400)
+    if len(password) < 6:
+        return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
+    
+    existing = get_user_by_email(email)
+    if existing:
+        return JSONResponse({"status": "error", "message": "An operator account with this email already exists. Please sign in."}, status_code=400)
+    
+    # Auto-grant admin role if email matches settings.ADMIN_EMAIL
+    role = "admin" if email == settings.ADMIN_EMAIL.lower() else "user"
+    pw_hash, salt = hash_password(password)
+    user = create_user(email=email, password_hash=pw_hash, salt=salt, role=role)
+    
+    # Create persistent session
+    session_token = create_session(user.id, expire_hours=settings.SESSION_EXPIRE_HOURS)
+    
+    resp = JSONResponse({
+        "status": "success",
+        "message": "Operator account provisioned successfully",
+        "user": user.model_dump(),
+        "redirect": "/dashboard"
+    })
+    resp.set_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        value=session_token,
+        max_age=settings.SESSION_EXPIRE_HOURS * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=False
+    )
+    return resp
+
+@app.post("/api/auth/login")
+async def api_login(data: UserLogin):
+    email = data.email.strip().lower()
+    password = data.password
+    if not email or not password:
+        return JSONResponse({"status": "error", "message": "Email and password required"}, status_code=400)
+    
+    record = get_user_auth_record_by_email(email)
+    if not record or not verify_password(password, record["password_hash"], record["salt"]):
+        return JSONResponse({"status": "error", "message": "Invalid email or access passphrase."}, status_code=401)
+    
+    user_role = record["role"]
+    if email == settings.ADMIN_EMAIL.lower():
+        user_role = "admin"
+        
+    user = User(
+        id=record["id"],
+        email=record["email"],
+        role=user_role,
+        created_at=record["created_at"]
+    )
+    
+    session_token = create_session(user.id, expire_hours=settings.SESSION_EXPIRE_HOURS)
+    resp = JSONResponse({
+        "status": "success",
+        "message": "Identity authenticated",
+        "user": user.model_dump(),
+        "redirect": "/dashboard"
+    })
+    resp.set_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        value=session_token,
+        max_age=settings.SESSION_EXPIRE_HOURS * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=False
+    )
+    return resp
+
+@app.post("/api/auth/logout")
+async def api_logout(request: Request):
+    session_token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    if session_token:
+        delete_session(session_token)
+    resp = JSONResponse({"status": "success", "message": "Session terminated", "redirect": "/login"})
+    resp.delete_cookie(key=settings.SESSION_COOKIE_NAME)
+    return resp
+
+@app.get("/api/auth/me")
+async def api_me(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"authenticated": False, "user": None}, status_code=401)
+    return {"authenticated": True, "user": user.model_dump(), "is_admin": user.is_admin}
+
+# -------------------------------------------------------------
+# REST API Endpoints for SOC Dashboard (Multi-Tenant Scoped)
 # -------------------------------------------------------------
 
 @app.get("/api/stats")
-async def api_stats():
-    return get_dashboard_stats()
+async def api_stats(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    return get_dashboard_stats(user_id=user.id, is_admin=user.is_admin)
 
 @app.get("/api/incidents")
-async def api_incidents(limit: int = 50):
-    incidents = list_incidents(limit=limit)
+async def api_incidents(request: Request, limit: int = 50):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    incidents = list_incidents(user_id=user.id, is_admin=user.is_admin, limit=limit)
     return [i.model_dump() for i in incidents]
 
 @app.get("/api/tokens")
-async def api_tokens():
-    tokens = list_tokens()
+async def api_tokens(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    tokens = list_tokens(user_id=user.id, is_admin=user.is_admin)
     return [t.model_dump() for t in tokens]
 
 @app.post("/api/tokens/create")
-async def api_create_token(data: Dict[str, Any]):
+async def api_create_token(request: Request, data: Dict[str, Any]):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
     token_type = data.get("token_type", "web")
     label = data.get("label", f"Decoy-{token_type.upper()}")
     desc = data.get("description", "Generated from Sentinel SOC Dashboard")
 
     if token_type == "web":
-        token, _ = create_web_canary_token(label, desc)
+        token, _ = create_web_canary_token(label, desc, owner_id=user.id, owner_email=user.email)
     elif token_type == "aws":
-        token, _ = create_aws_honeytoken(label, desc)
+        token, _ = create_aws_honeytoken(label, desc, owner_id=user.id, owner_email=user.email)
     elif token_type == "env":
-        token, _ = create_env_honeytoken(label, desc)
+        token, _ = create_env_honeytoken(label, desc, owner_id=user.id, owner_email=user.email)
     elif token_type == "git":
-        token, _ = create_git_honeytoken(f"traps/git_decoy_{label}", label)
+        token, _ = create_git_honeytoken(f"traps/git_decoy_{label}", label, owner_id=user.id, owner_email=user.email)
     elif token_type == "pdf":
-        token, _ = create_canary_pdf(f"traps/{label}.pdf", label)
+        token, _ = create_canary_pdf(f"traps/{label}.pdf", label, owner_id=user.id, owner_email=user.email)
     elif token_type == "keepass":
-        token, _ = create_keepass_honeytoken(f"traps/{label}.kdbx", label)
+        token, _ = create_keepass_honeytoken(f"traps/{label}.kdbx", label, owner_id=user.id, owner_email=user.email)
     else:
-        token, _ = create_web_canary_token(label, desc)
+        token, _ = create_web_canary_token(label, desc, owner_id=user.id, owner_email=user.email)
         
     return {
         "status": "success",
@@ -179,12 +321,20 @@ async def api_create_token(data: Dict[str, Any]):
     }
 
 @app.get("/api/tokens/{token_id}/download")
-async def api_download_token(token_id: str):
+async def api_download_token(token_id: str, request: Request):
     """Dynamically generates and downloads the file trap for deployment to disk/storage."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
     token = get_token(token_id)
     if not token:
         return JSONResponse({"status": "error", "message": "Honeytoken not found"}, status_code=404)
     
+    # Non-admin users cannot download assets owned by someone else
+    if not user.is_admin and token.owner_id and token.owner_id != user.id:
+        return JSONResponse({"status": "error", "message": "Access denied to this deception asset"}, status_code=403)
+
     try:
         content_bytes, filename, media_type = generate_token_download_payload(token)
         return Response(
@@ -201,7 +351,11 @@ async def api_download_token(token_id: str):
         return JSONResponse({"status": "error", "message": f"Failed to generate download: {str(e)}"}, status_code=500)
 
 @app.post("/api/contain/isolate")
-async def api_isolate_ip(data: Dict[str, Any]):
+async def api_isolate_ip(request: Request, data: Dict[str, Any]):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
     ip = data.get("ip")
     if not ip:
         return JSONResponse({"status": "error", "message": "IP required"}, status_code=400)
@@ -209,7 +363,7 @@ async def api_isolate_ip(data: Dict[str, Any]):
     return result
 
 # -------------------------------------------------------------
-# Deception & Honeytoken Listener Endpoints
+# Deception & Honeytoken Listener Endpoints (PUBLIC CALLBACKS)
 # -------------------------------------------------------------
 
 @app.api_route("/t/{token_id}", methods=["GET", "POST", "HEAD"])
@@ -218,7 +372,10 @@ async def trigger_canary(
     request: Request,
     background_tasks: BackgroundTasks
 ):
-    """Primary canary webhook endpoint."""
+    """
+    Primary canary webhook endpoint.
+    PUBLIC ACCESS: Intruder callbacks MUST trip freely without authentication!
+    """
     raw_ip, is_local = extract_client_ip(request)
     headers_dict = dict(request.headers)
     user_agent = headers_dict.get("user-agent", "")

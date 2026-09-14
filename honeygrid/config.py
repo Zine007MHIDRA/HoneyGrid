@@ -31,5 +31,9 @@ class Settings:
     HONEYGRID_BASE_URL: str = _get_base_url()
     HONEYGRID_DB_PATH: str = os.getenv("HONEYGRID_DB_PATH", str(BASE_DIR / "honeygrid.db")).strip() or str(BASE_DIR / "honeygrid.db")
     ENABLE_GEOIP_LOOKUP: bool = os.getenv("ENABLE_GEOIP_LOOKUP", "true").strip().lower() in ("true", "1", "yes")
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "zine.mhidra@gmail.com").strip().lower()
+    HONEYGRID_SECRET_KEY: str = os.getenv("HONEYGRID_SECRET_KEY", "hg-sentinel-master-secret-key-392810").strip()
+    SESSION_COOKIE_NAME: str = "honeygrid_session"
+    SESSION_EXPIRE_HOURS: int = _get_int("SESSION_EXPIRE_HOURS", 168)  # 7 days
 
 settings = Settings()

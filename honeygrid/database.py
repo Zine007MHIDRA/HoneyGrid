@@ -1,10 +1,12 @@
 import os
 import sqlite3
 import json
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from honeygrid.config import settings
-from honeygrid.models import Token, IncidentEvent, BrowserTelemetry
+from honeygrid.models import Token, IncidentEvent, BrowserTelemetry, User
+from honeygrid.core.auth import generate_session_token, generate_user_id
 
 def get_db_path() -> str:
     """Returns database file path, auto-switching to /tmp if running in serverless environments like Vercel or on read-only filesystems."""
@@ -41,6 +43,29 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # Table for registered users
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        created_at TEXT NOT NULL
+    )
+    """)
+
+    # Table for user sessions
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS sessions (
+        session_token TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+    """)
+
     # Table for registered tokens
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tokens (
@@ -51,6 +76,8 @@ def init_db():
         created_at TEXT NOT NULL,
         trigger_count INTEGER DEFAULT 0,
         is_active INTEGER DEFAULT 1,
+        owner_id TEXT,
+        owner_email TEXT,
         metadata TEXT
     )
     """)
@@ -91,7 +118,17 @@ def init_db():
     )
     """)
     
-    # Migration helper: ensure new columns exist if table was previously created
+    # Migration helper for tokens: ensure owner_id and owner_email exist
+    cursor.execute("PRAGMA table_info(tokens)")
+    existing_token_cols = {row["name"] for row in cursor.fetchall()}
+    for col_name, col_type in [("owner_id", "TEXT"), ("owner_email", "TEXT")]:
+        if col_name not in existing_token_cols:
+            try:
+                cursor.execute(f"ALTER TABLE tokens ADD COLUMN {col_name} {col_type}")
+            except sqlite3.OperationalError:
+                pass
+
+    # Migration helper for incidents: ensure hardware/threat cols exist
     cursor.execute("PRAGMA table_info(incidents)")
     existing_cols = {row["name"] for row in cursor.fetchall()}
     
@@ -117,12 +154,108 @@ def init_db():
     conn.commit()
     conn.close()
 
+# -------------------------------------------------------------
+# User & Session Authentication Helpers
+# -------------------------------------------------------------
+
+def create_user(email: str, password_hash: str, salt: str, role: str = "user") -> User:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    user_id = generate_user_id()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cursor.execute(
+        "INSERT INTO users (id, email, password_hash, salt, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, email.strip().lower(), password_hash, salt, role, now_iso)
+    )
+    conn.commit()
+    conn.close()
+    return User(id=user_id, email=email.strip().lower(), role=role, created_at=now_iso)
+
+def get_user_by_email(email: str) -> Optional[User]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, role, created_at FROM users WHERE LOWER(email) = LOWER(?)", (email.strip(),))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return User(id=row["id"], email=row["email"], role=row["role"], created_at=row["created_at"])
+
+def get_user_auth_record_by_email(email: str) -> Optional[Dict[str, Any]]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, password_hash, salt, role, created_at FROM users WHERE LOWER(email) = LOWER(?)", (email.strip(),))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return dict(row)
+
+def get_user_by_id(user_id: str) -> Optional[User]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, role, created_at FROM users WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return User(id=row["id"], email=row["email"], role=row["role"], created_at=row["created_at"])
+
+def create_session(user_id: str, expire_hours: int = 168) -> str:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    session_token = generate_session_token()
+    now = datetime.now(timezone.utc)
+    expires_at = (now + timedelta(hours=expire_hours)).isoformat()
+    cursor.execute(
+        "INSERT INTO sessions (session_token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+        (session_token, user_id, now.isoformat(), expires_at)
+    )
+    conn.commit()
+    conn.close()
+    return session_token
+
+def get_user_by_session(session_token: str) -> Optional[User]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""
+        SELECT users.id, users.email, users.role, users.created_at, sessions.expires_at
+        FROM sessions
+        JOIN users ON sessions.user_id = users.id
+        WHERE sessions.session_token = ?
+    """, (session_token,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return None
+    
+    if row["expires_at"] < now_iso:
+        cursor.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
+        conn.commit()
+        conn.close()
+        return None
+        
+    conn.close()
+    return User(id=row["id"], email=row["email"], role=row["role"], created_at=row["created_at"])
+
+def delete_session(session_token: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
+    conn.commit()
+    conn.close()
+
+# -------------------------------------------------------------
+# Honeytoken & Incident Operations
+# -------------------------------------------------------------
+
 def save_token(token: Token) -> Token:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT OR REPLACE INTO tokens (id, token_type, label, description, created_at, trigger_count, is_active, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO tokens (id, token_type, label, description, created_at, trigger_count, is_active, metadata, owner_id, owner_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         token.id,
         token.token_type,
@@ -131,7 +264,9 @@ def save_token(token: Token) -> Token:
         token.created_at,
         token.trigger_count,
         1 if token.is_active else 0,
-        json.dumps(token.metadata)
+        json.dumps(token.metadata),
+        token.owner_id,
+        token.owner_email
     ))
     conn.commit()
     conn.close()
@@ -145,6 +280,7 @@ def get_token(token_id: str) -> Optional[Token]:
     conn.close()
     if not row:
         return None
+    row_keys = row.keys()
     return Token(
         id=row["id"],
         token_type=row["token_type"],
@@ -153,17 +289,24 @@ def get_token(token_id: str) -> Optional[Token]:
         created_at=row["created_at"],
         trigger_count=row["trigger_count"],
         is_active=bool(row["is_active"]),
+        owner_id=row["owner_id"] if "owner_id" in row_keys else None,
+        owner_email=row["owner_email"] if "owner_email" in row_keys else None,
         metadata=json.loads(row["metadata"] or "{}")
     )
 
-def list_tokens() -> List[Token]:
+def list_tokens(user_id: Optional[str] = None, is_admin: bool = False) -> List[Token]:
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tokens ORDER BY created_at DESC")
+    if is_admin or user_id is None:
+        cursor.execute("SELECT * FROM tokens ORDER BY created_at DESC")
+    else:
+        cursor.execute("SELECT * FROM tokens WHERE owner_id = ? ORDER BY created_at DESC", (user_id,))
     rows = cursor.fetchall()
     conn.close()
-    return [
-        Token(
+    results = []
+    for row in rows:
+        row_keys = row.keys()
+        results.append(Token(
             id=row["id"],
             token_type=row["token_type"],
             label=row["label"],
@@ -171,9 +314,11 @@ def list_tokens() -> List[Token]:
             created_at=row["created_at"],
             trigger_count=row["trigger_count"],
             is_active=bool(row["is_active"]),
+            owner_id=row["owner_id"] if "owner_id" in row_keys else None,
+            owner_email=row["owner_email"] if "owner_email" in row_keys else None,
             metadata=json.loads(row["metadata"] or "{}")
-        ) for row in rows
-    ]
+        ))
+    return results
 
 def record_incident(event: IncidentEvent) -> int:
     conn = get_db_connection()
@@ -247,10 +392,18 @@ def update_incident_telemetry(token_id: str, telemetry: BrowserTelemetry):
     conn.commit()
     conn.close()
 
-def list_incidents(limit: int = 50) -> List[IncidentEvent]:
+def list_incidents(user_id: Optional[str] = None, is_admin: bool = False, limit: int = 50) -> List[IncidentEvent]:
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM incidents ORDER BY id DESC LIMIT ?", (limit,))
+    if is_admin or user_id is None:
+        cursor.execute("SELECT * FROM incidents ORDER BY id DESC LIMIT ?", (limit,))
+    else:
+        cursor.execute("""
+            SELECT incidents.* FROM incidents 
+            JOIN tokens ON incidents.token_id = tokens.id 
+            WHERE tokens.owner_id = ? 
+            ORDER BY incidents.id DESC LIMIT ?
+        """, (user_id, limit))
     rows = cursor.fetchall()
     conn.close()
     results = []
@@ -289,31 +442,53 @@ def list_incidents(limit: int = 50) -> List[IncidentEvent]:
         ))
     return results
 
-def get_dashboard_stats() -> Dict[str, Any]:
-    """Computes summary metrics for the SOC web dashboard."""
+def get_dashboard_stats(user_id: Optional[str] = None, is_admin: bool = False) -> Dict[str, Any]:
+    """Computes summary metrics for the SOC web dashboard, scoped by user unless admin."""
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute("SELECT COUNT(*) FROM tokens")
-    total_tokens = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) FROM incidents")
-    total_incidents = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) FROM incidents WHERE threat_score >= 50 OR is_vpn_proxy = 1")
-    high_threat_incidents = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(DISTINCT attacker_ip) FROM incidents")
-    unique_attackers = cursor.fetchone()[0]
-    
-    cursor.execute("""
-        SELECT geo_country, COUNT(*) as count 
-        FROM incidents 
-        WHERE geo_country != 'Unknown' AND geo_country != 'Localhost / Internal Subnet'
-        GROUP BY geo_country ORDER BY count DESC LIMIT 5
-    """)
-    top_countries = [{"country": r[0], "count": r[1]} for r in cursor.fetchall()]
-    
+    if is_admin or user_id is None:
+        cursor.execute("SELECT COUNT(*) FROM tokens")
+        total_tokens = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM incidents")
+        total_incidents = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM incidents WHERE threat_score >= 50 OR is_vpn_proxy = 1")
+        high_threat_incidents = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(DISTINCT attacker_ip) FROM incidents")
+        unique_attackers = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT geo_country, COUNT(*) as count 
+            FROM incidents 
+            WHERE geo_country != 'Unknown' AND geo_country != 'Localhost / Internal Subnet'
+            GROUP BY geo_country ORDER BY count DESC LIMIT 5
+        """)
+        top_countries = [{"country": r[0], "count": r[1]} for r in cursor.fetchall()]
+    else:
+        cursor.execute("SELECT COUNT(*) FROM tokens WHERE owner_id = ?", (user_id,))
+        total_tokens = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM incidents JOIN tokens ON incidents.token_id = tokens.id WHERE tokens.owner_id = ?", (user_id,))
+        total_incidents = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM incidents JOIN tokens ON incidents.token_id = tokens.id WHERE tokens.owner_id = ? AND (threat_score >= 50 OR is_vpn_proxy = 1)", (user_id,))
+        high_threat_incidents = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(DISTINCT attacker_ip) FROM incidents JOIN tokens ON incidents.token_id = tokens.id WHERE tokens.owner_id = ?", (user_id,))
+        unique_attackers = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT geo_country, COUNT(*) as count 
+            FROM incidents 
+            JOIN tokens ON incidents.token_id = tokens.id
+            WHERE tokens.owner_id = ? AND geo_country != 'Unknown' AND geo_country != 'Localhost / Internal Subnet'
+            GROUP BY geo_country ORDER BY count DESC LIMIT 5
+        """, (user_id,))
+        top_countries = [{"country": r[0], "count": r[1]} for r in cursor.fetchall()]
+        
     conn.close()
     
     return {

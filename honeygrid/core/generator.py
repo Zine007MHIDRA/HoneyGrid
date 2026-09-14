@@ -5,7 +5,7 @@ import io
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from honeygrid.config import settings
 from honeygrid.models import Token
 from honeygrid.database import save_token
@@ -15,7 +15,7 @@ def generate_unique_token_id(prefix: str = "hg") -> str:
     rand_chars = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(12))
     return f"{prefix}_{rand_chars}"
 
-def create_web_canary_token(label: str, description: str = "") -> Tuple[Token, str]:
+def create_web_canary_token(label: str, description: str = "", owner_id: Optional[str] = None, owner_email: Optional[str] = None) -> Tuple[Token, str]:
     """Generates an HTTP canary link."""
     token_id = generate_unique_token_id("canary")
     canary_url = f"{settings.HONEYGRID_BASE_URL}/t/{token_id}"
@@ -26,12 +26,14 @@ def create_web_canary_token(label: str, description: str = "") -> Tuple[Token, s
         label=label,
         description=description or f"Web canary URL: {canary_url}",
         created_at=datetime.now(timezone.utc).isoformat(),
+        owner_id=owner_id,
+        owner_email=owner_email,
         metadata={"canary_url": canary_url}
     )
     save_token(token)
     return token, canary_url
 
-def create_aws_honeytoken(label: str, description: str = "") -> Tuple[Token, Dict[str, str]]:
+def create_aws_honeytoken(label: str, description: str = "", owner_id: Optional[str] = None, owner_email: Optional[str] = None) -> Tuple[Token, Dict[str, str]]:
     """
     Generates a realistic AWS IAM decoy credential set.
     The secret key is encoded with a canary trigger URL or callback endpoint.
@@ -57,6 +59,8 @@ region = us-east-1
         label=label,
         description=description or "Decoy AWS IAM Access Key",
         created_at=datetime.now(timezone.utc).isoformat(),
+        owner_id=owner_id,
+        owner_email=owner_email,
         metadata={
             "access_key_id": access_key_id,
             "canary_url": canary_url,
@@ -66,7 +70,7 @@ region = us-east-1
     save_token(token)
     return token, {"access_key_id": access_key_id, "secret_key": secret_key, "file_content": credentials_content, "canary_url": canary_url}
 
-def create_env_honeytoken(label: str, description: str = "") -> Tuple[Token, str]:
+def create_env_honeytoken(label: str, description: str = "", owner_id: Optional[str] = None, owner_email: Optional[str] = None) -> Tuple[Token, str]:
     """Generates a realistic decoy .env file with multiple canary-infused keys."""
     token_id = generate_unique_token_id("env")
     canary_url = f"{settings.HONEYGRID_BASE_URL}/t/{token_id}"
@@ -85,12 +89,14 @@ GITHUB_ENTERPRISE_TOKEN=ghp_{secrets.token_urlsafe(32)}
         label=label,
         description=description or "Decoy .env file with sensitive credentials and canary sync URL",
         created_at=datetime.now(timezone.utc).isoformat(),
+        owner_id=owner_id,
+        owner_email=owner_email,
         metadata={"canary_url": canary_url, "file_content": env_content}
     )
     save_token(token)
     return token, env_content
 
-def create_honeyfile_tripwire(filepath: str, label: str, description: str = "") -> Token:
+def create_honeyfile_tripwire(filepath: str, label: str, description: str = "", owner_id: Optional[str] = None, owner_email: Optional[str] = None) -> Token:
     """Registers a filesystem file path as a tripwire to be monitored by the file watcher."""
     token_id = generate_unique_token_id("file")
     resolved_path = str(Path(filepath).resolve())
@@ -101,12 +107,14 @@ def create_honeyfile_tripwire(filepath: str, label: str, description: str = "") 
         label=label,
         description=description or f"Honeyfile Tripwire at {resolved_path}",
         created_at=datetime.now(timezone.utc).isoformat(),
+        owner_id=owner_id,
+        owner_email=owner_email,
         metadata={"target_path": resolved_path}
     )
     save_token(token)
     return token
 
-def create_git_honeytoken(target_dir: str, label: str = "Internal-Git-Decoy") -> Tuple[Token, str]:
+def create_git_honeytoken(target_dir: str, label: str = "Internal-Git-Decoy", owner_id: Optional[str] = None, owner_email: Optional[str] = None) -> Tuple[Token, str]:
     """
     Generates a decoy Git repository containing a canary remote URL in .git/config.
     When an attacker enters the repo and runs 'git pull' or 'git fetch', the canary trips.
@@ -142,12 +150,14 @@ def create_git_honeytoken(target_dir: str, label: str = "Internal-Git-Decoy") ->
         label=label,
         description=f"Decoy Git repository at {repo_path.resolve()}",
         created_at=datetime.now(timezone.utc).isoformat(),
+        owner_id=owner_id,
+        owner_email=owner_email,
         metadata={"canary_url": canary_url, "repo_path": str(repo_path.resolve())}
     )
     save_token(token)
     return token, canary_url
 
-def create_keepass_honeytoken(output_path: str, label: str = "Corporate-KeePass-Vault") -> Tuple[Token, str]:
+def create_keepass_honeytoken(output_path: str, label: str = "Corporate-KeePass-Vault", owner_id: Optional[str] = None, owner_email: Optional[str] = None) -> Tuple[Token, str]:
     """
     Generates an authentic-looking KeePass 2.x (.kdbx) password vault database.
     Registers the path with the honeyfile tripwire monitor.
@@ -166,7 +176,9 @@ def create_keepass_honeytoken(output_path: str, label: str = "Corporate-KeePass-
     token = create_honeyfile_tripwire(
         str(out_file),
         label=label,
-        description=f"Decoy KeePass Database Vault at {out_file.resolve()}"
+        description=f"Decoy KeePass Database Vault at {out_file.resolve()}",
+        owner_id=owner_id,
+        owner_email=owner_email
     )
     return token, str(out_file.resolve())
 

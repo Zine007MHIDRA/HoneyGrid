@@ -2,6 +2,24 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 
+class User(BaseModel):
+    id: str
+    email: str
+    role: str = "user"  # "admin" or "user"
+    created_at: str
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == "admin" or self.email.lower() == "zine.mhidra@gmail.com"
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
 class TokenCreate(BaseModel):
     token_type: str = Field(..., description="Type of token: web, aws_key, db_conn, env_file, canary_pdf, honeyfile")
     label: str = Field(..., description="Identifying name e.g., 'Finance-Drive-Honeyfile'")
@@ -16,6 +34,8 @@ class Token(BaseModel):
     created_at: str
     trigger_count: int = 0
     is_active: bool = True
+    owner_id: Optional[str] = None
+    owner_email: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class IncidentEvent(BaseModel):

@@ -1,6 +1,6 @@
 import io
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 from datetime import datetime, timezone
 from honeygrid.config import settings
 from honeygrid.models import Token
@@ -101,7 +101,7 @@ startxref
 """
         return raw_pdf.encode("latin-1")
 
-def create_canary_pdf(output_path: str, label: str = "Confidential Payroll Decoy", document_title: str = "Confidential Compensation Review") -> Tuple[Token, str]:
+def create_canary_pdf(output_path: str, label: str = "Confidential Payroll Decoy", document_title: str = "Confidential Compensation Review", owner_id: Optional[str] = None, owner_email: Optional[str] = None) -> Tuple[Token, str]:
     """
     Generates a realistic corporate PDF document with an embedded canary beacon link, saves to disk if possible,
     and returns the Token model.
@@ -127,6 +127,8 @@ def create_canary_pdf(output_path: str, label: str = "Confidential Payroll Decoy
         label=label,
         description=f"Canary PDF decoy document: {label}",
         created_at=datetime.now(timezone.utc).isoformat(),
+        owner_id=owner_id,
+        owner_email=owner_email,
         metadata={"canary_url": canary_url, "file_path": resolved_path}
     )
     save_token(token)

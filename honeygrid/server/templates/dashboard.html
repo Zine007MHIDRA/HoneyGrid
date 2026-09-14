@@ -198,11 +198,36 @@
                         </svg>
                     </span>
                 </button>
+
+                <!-- User Profile & Sign Out Bar -->
+                <div class="flex items-center gap-2 pl-2 border-l border-white/10">
+                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs font-mono">
+                        <div class="w-2 h-2 rounded-full bg-rose-500"></div>
+                        <span id="user-email-display" class="text-slate-300 max-w-[170px] truncate" title="Active Operator">...</span>
+                        <span id="user-role-badge" class="hidden px-1.5 py-0.5 text-[9px] font-bold rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">ADMIN</span>
+                    </div>
+                    <button onclick="logoutUser()" title="Sign Out of Sentinel SOC" class="p-2 rounded-lg text-slate-400 hover:text-rose-400 bg-white/[0.03] hover:bg-rose-500/10 border border-white/[0.08] hover:border-rose-500/20 transition-all active:scale-[0.98]">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
     </header>
 
     <main class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+
+        <!-- Multi-Tenant Scope Banner -->
+        <div id="tenant-scope-banner" class="flex items-center justify-between px-4 py-2.5 rounded-xl border border-white/[0.06] bg-black/40 text-xs">
+            <div class="flex items-center gap-2 text-slate-300 font-sans">
+                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span id="tenant-scope-text">Isolated Operator Workspace: Displaying your private canaries & incident telemetry</span>
+            </div>
+            <div id="tenant-scope-admin-badge" class="hidden flex items-center gap-2 font-mono text-[10px] text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20">
+                <span>⚡ MASTER ADMIN OVERRIDE ACTIVE &bull; ALL FLEET TELEMETRY UNLOCKED</span>
+            </div>
+        </div>
 
         <!-- Command KPI Metrics: Double-Bezel Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -558,6 +583,10 @@
             try {
                 // Fetch stats
                 const statsRes = await fetch('/api/stats');
+                if (statsRes.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
                 const stats = await statsRes.json();
                 document.getElementById('stat-tokens').innerText = stats.total_tokens;
                 document.getElementById('stat-incidents').innerText = stats.total_incidents;
@@ -658,14 +687,19 @@
         function renderTokens(tokens) {
             const tbody = document.getElementById('tokens-table-body');
             if (!tokens.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500 font-sans text-xs">No deception assets deployed.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500 font-sans text-xs">No deception assets deployed in your workspace. Click "Deploy Deception Trap" to plant your first canary.</td></tr>';
                 return;
             }
+            const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.email?.toLowerCase() === 'zine.mhidra@gmail.com');
             tbody.innerHTML = tokens.map(t => {
                 const canaryUrl = t.metadata?.canary_url || '';
+                const ownerTag = (isAdmin && t.owner_email) ? `<div class="text-[10px] text-slate-500 font-sans">Owner: ${t.owner_email}</div>` : '';
                 return `
                 <tr class="hover:bg-white/[0.02] transition">
-                    <td class="p-3.5 text-cyan-400 font-bold font-mono">${t.id}</td>
+                    <td class="p-3.5 text-cyan-400 font-bold font-mono">
+                        <div>${t.id}</div>
+                        ${ownerTag}
+                    </td>
                     <td class="p-3.5 text-amber-400 uppercase text-[10px] font-sans">
                         <span class="px-2 py-0.5 rounded bg-black/40 border border-white/[0.08]">${t.token_type}</span>
                     </td>
@@ -845,10 +879,52 @@ interfaces without revealing surveillance mechanisms to the attacker.
             if (el) el.style.display = 'none';
         }
 
-        window.onload = () => {
-            initMap();
-            refreshData();
-            setInterval(refreshData, 10000); // Poll every 10 seconds
+        let currentUser = null;
+
+        async function fetchUserSession() {
+            try {
+                const res = await fetch('/api/auth/me');
+                if (!res.ok) {
+                    window.location.href = '/login';
+                    return false;
+                }
+                const data = await res.json();
+                if (!data.authenticated || !data.user) {
+                    window.location.href = '/login';
+                    return false;
+                }
+                currentUser = data.user;
+                document.getElementById('user-email-display').innerText = currentUser.email;
+                document.getElementById('user-email-display').title = currentUser.email;
+
+                const isAdmin = currentUser.role === 'admin' || currentUser.email.toLowerCase() === 'zine.mhidra@gmail.com';
+                if (isAdmin) {
+                    document.getElementById('user-role-badge').classList.remove('hidden');
+                    document.getElementById('tenant-scope-admin-badge').classList.remove('hidden');
+                    document.getElementById('tenant-scope-text').innerText = 'Master Sentinel View: Full Fleet Telemetry & Decoy Operations';
+                }
+                return true;
+            } catch (e) {
+                console.error("Auth check failed:", e);
+                window.location.href = '/login';
+                return false;
+            }
+        }
+
+        async function logoutUser() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (e) {}
+            window.location.href = '/login';
+        }
+
+        window.onload = async () => {
+            const authed = await fetchUserSession();
+            if (authed) {
+                initMap();
+                refreshData();
+                setInterval(refreshData, 10000); // Poll every 10 seconds
+            }
         };
     </script>
 </body>

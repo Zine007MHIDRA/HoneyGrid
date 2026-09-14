@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HoneyGrid Sentinel &bull; Identity & Access Gateway</title>
+    
+    <!-- Google Fonts: Geist & Geist Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Geist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                        mono: ['"Geist Mono"', 'monospace']
+                    },
+                    colors: {
+                        obsidian: '#05070c',
+                        surfaceDark: '#0a0e17',
+                        surfaceCard: '#0f1422',
+                        surfaceBorder: '#1c2438',
+                        laserCrimson: '#f43f5e',
+                        laserRed: '#ef4444',
+                        cyberCyan: '#06b6d4',
+                        matrixEmerald: '#10b981'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+        body {
+            background-color: #05070c;
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-image: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(244, 63, 94, 0.12), transparent),
+                radial-gradient(circle at 100% 100%, rgba(6, 182, 212, 0.05), transparent),
+                linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+        }
+
+        .bezel-card {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 50%, rgba(244, 63, 94, 0.06) 100%);
+            border-radius: 1.25rem;
+            padding: 1px;
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 40px -10px rgba(244, 63, 94, 0.12);
+        }
+
+        .bezel-inner {
+            background: radial-gradient(circle at 50% 0%, #111728 0%, #090d16 100%);
+            border-radius: calc(1.25rem - 1px);
+        }
+
+        .input-box {
+            background: rgba(10, 14, 23, 0.7);
+            border: 1px solid #1c2438;
+            color: #f8fafc;
+            transition: all 0.2s ease;
+        }
+        .input-box:focus {
+            outline: none;
+            border-color: #f43f5e;
+            box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.18), inset 0 1px 2px rgba(0, 0, 0, 0.5);
+            background: rgba(15, 20, 34, 0.9);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between text-slate-200 antialiased selection:bg-rose-500/30 selection:text-rose-200">
+
+    <!-- Top Status Bar -->
+    <header class="w-full border-b border-white/[0.06] bg-obsidian/80 backdrop-blur-md px-6 py-4">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg p-[1.5px] bg-gradient-to-b from-rose-500/50 via-white/10 to-transparent">
+                    <div class="w-full h-full rounded-[6px] overflow-hidden bg-black flex items-center justify-center">
+                        <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover" onerror="this.src='/static/logo.jpg'" />
+                    </div>
+                </div>
+                <div>
+                    <span class="text-sm font-bold tracking-tight text-white font-sans flex items-center gap-2">
+                        HONEYGRID
+                        <span class="text-[9px] font-mono tracking-widest uppercase px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/25 font-semibold">
+                            SENTINEL SOC
+                        </span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 font-mono text-[11px] text-slate-400">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                </span>
+                <span class="text-slate-300 font-semibold">GATEWAY SECURED</span>
+                <span class="text-slate-600 hidden sm:inline">&bull;</span>
+                <span class="text-slate-500 hidden sm:inline">ZERO-TRUST PROTOCOL</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Auth Card Container -->
+    <main class="flex-1 flex items-center justify-center p-4 sm:p-6 my-6">
+        <div class="w-full max-w-md">
+            
+            <div class="bezel-card">
+                <div class="bezel-inner p-6 sm:p-8">
+
+                    <!-- Logo and Title Area -->
+                    <div class="text-center mb-6">
+                        <div class="inline-flex relative mb-4">
+                            <div class="w-16 h-16 rounded-2xl p-[2px] bg-gradient-to-b from-rose-500/60 via-white/15 to-transparent shadow-xl shadow-black/80">
+                                <div class="w-full h-full rounded-[14px] overflow-hidden bg-black flex items-center justify-center border border-white/10">
+                                    <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover" onerror="this.src='/static/logo.jpg'" />
+                                </div>
+                            </div>
+                            <span class="absolute -bottom-1 -right-1 flex h-4 w-4">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-4 w-4 bg-rose-500 border-2 border-[#090d16]"></span>
+                            </span>
+                        </div>
+
+                        <h2 class="text-xl font-bold text-white tracking-tight font-sans">
+                            SOC Access Gateway
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-1 font-sans">
+                            Sign in to inspect your deployed deception traps and live incidents
+                        </p>
+                    </div>
+
+                    <!-- Auth Mode Tabs -->
+                    <div class="flex rounded-xl bg-black/40 p-1 border border-white/[0.06] mb-6">
+                        <button id="tab-btn-login" onclick="switchAuthTab('login')" class="flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-md shadow-rose-950/40">
+                            Sign In
+                        </button>
+                        <button id="tab-btn-register" onclick="switchAuthTab('register')" class="flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200">
+                            Create Account
+                        </button>
+                    </div>
+
+                    <!-- Alert / Error Banner -->
+                    <div id="auth-alert" class="hidden mb-5 p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs flex items-start gap-2.5">
+                        <svg class="w-4 h-4 text-rose-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span id="auth-alert-msg" class="flex-1 font-sans leading-relaxed"></span>
+                    </div>
+
+                    <!-- Admin Email Detection Hint -->
+                    <div id="admin-detected-badge" class="hidden mb-4 p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs flex items-center gap-2">
+                        <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <span class="font-mono text-[11px]">MASTER ADMIN PRIVILEGES RECOGNIZED</span>
+                    </div>
+
+                    <!-- Form -->
+                    <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1.5 font-sans">
+                                Corporate or Personal Email
+                            </label>
+                            <div class="relative">
+                                <input 
+                                    id="auth-email" 
+                                    type="email" 
+                                    required 
+                                    placeholder="analyst@internal.corp or zine.mhidra@gmail.com"
+                                    oninput="checkAdminEmail(this.value)"
+                                    class="w-full input-box px-3.5 py-2.5 rounded-xl text-sm font-sans" 
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="text-xs font-medium text-slate-300 font-sans">
+                                    Access Passphrase
+                                </label>
+                                <span id="pwd-hint" class="text-[10px] text-slate-500 font-mono">Min 6 characters</span>
+                            </div>
+                            <div class="relative">
+                                <input 
+                                    id="auth-password" 
+                                    type="password" 
+                                    required 
+                                    placeholder="••••••••••••" 
+                                    class="w-full input-box px-3.5 py-2.5 rounded-xl text-sm font-mono pr-10" 
+                                />
+                                <button 
+                                    type="button" 
+                                    onclick="togglePasswordVisibility()" 
+                                    tabindex="-1"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors">
+                                    <svg id="eye-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="register-terms" class="hidden text-[11px] text-slate-400 leading-relaxed font-sans pt-1">
+                            By creating an account, your user ID is provisioned with isolated canary assets, multi-tenant incident isolation, and encrypted threat telemetry.
+                        </div>
+
+                        <button 
+                            id="submit-btn" 
+                            type="submit" 
+                            class="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-semibold text-xs tracking-wider uppercase shadow-lg shadow-rose-950/60 transition-all duration-300 active:scale-[0.99] flex items-center justify-center gap-2">
+                            <span id="btn-text">Authenticate to Sentinel SOC</span>
+                            <svg id="btn-spinner" class="hidden animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                        </button>
+                    </form>
+
+                    <!-- Technical Specs footer in card -->
+                    <div class="mt-6 pt-5 border-t border-white/[0.06] flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                        <div class="flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            <span>PBKDF2-HMAC-SHA256</span>
+                        </div>
+                        <div>200,000 ROUNDS</div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Bottom Information Pill -->
+            <div class="mt-6 text-center space-y-1 text-slate-500 text-[11px] font-sans">
+                <p>Canary tripwires deployed at <code class="text-slate-400">/t/{id}</code> remain public to catch unauthorized actors.</p>
+                <p>SOC telemetry and incident investigation require operator authentication.</p>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full border-t border-white/[0.06] bg-obsidian/90 px-6 py-4 text-center text-xs text-slate-500 font-mono">
+        HoneyGrid Sentinel Deception Matrix &bull; Enterprise Threat Hunting
+    </footer>
+
+    <!-- Logic Script -->
+    <script>
+        let currentAuthMode = 'login'; // 'login' or 'register'
+
+        function switchAuthTab(mode) {
+            currentAuthMode = mode;
+            hideAlert();
+            
+            const btnLogin = document.getElementById('tab-btn-login');
+            const btnRegister = document.getElementById('tab-btn-register');
+            const btnText = document.getElementById('btn-text');
+            const regTerms = document.getElementById('register-terms');
+
+            if (mode === 'login') {
+                btnLogin.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-md shadow-rose-950/40";
+                btnRegister.className = "flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200";
+                btnText.innerText = "Authenticate to Sentinel SOC";
+                regTerms.classList.add('hidden');
+            } else {
+                btnRegister.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-md shadow-rose-950/40";
+                btnLogin.className = "flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200";
+                btnText.innerText = "Initialize Operator Account";
+                regTerms.classList.remove('hidden');
+            }
+        }
+
+        function checkAdminEmail(email) {
+            const adminBadge = document.getElementById('admin-detected-badge');
+            if (email.trim().toLowerCase() === 'zine.mhidra@gmail.com') {
+                adminBadge.classList.remove('hidden');
+            } else {
+                adminBadge.classList.add('hidden');
+            }
+        }
+
+        function togglePasswordVisibility() {
+            const pwdInput = document.getElementById('auth-password');
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+            } else {
+                pwdInput.type = 'password';
+            }
+        }
+
+        function showAlert(msg) {
+            const alertBox = document.getElementById('auth-alert');
+            const msgEl = document.getElementById('auth-alert-msg');
+            msgEl.innerText = msg;
+            alertBox.classList.remove('hidden');
+        }
+
+        function hideAlert() {
+            const alertBox = document.getElementById('auth-alert');
+            alertBox.classList.add('hidden');
+        }
+
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            hideAlert();
+
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+
+            if (!email || !password) {
+                showAlert('Please provide both an email and password.');
+                return;
+            }
+
+            if (password.length < 6) {
+                showAlert('Password must be at least 6 characters.');
+                return;
+            }
+
+            const submitBtn = document.getElementById('submit-btn');
+            const btnSpinner = document.getElementById('btn-spinner');
+            const btnText = document.getElementById('btn-text');
+
+            submitBtn.disabled = true;
+            btnSpinner.classList.remove('hidden');
+
+            const endpoint = currentAuthMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email, password: password })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.status === 'success') {
+                    btnText.innerText = 'Access Granted. Redirecting...';
+                    window.location.href = data.redirect || '/dashboard';
+                } else {
+                    showAlert(data.message || data.detail || 'Authentication failed. Please verify credentials.');
+                    submitBtn.disabled = false;
+                    btnSpinner.classList.add('hidden');
+                }
+            } catch (err) {
+                showAlert('Network or gateway error: ' + err.message);
+                submitBtn.disabled = false;
+                btnSpinner.classList.add('hidden');
+            }
+        }
+
+        // On page load, verify if user already has an active session
+        window.onload = async () => {
+            try {
+                const res = await fetch('/api/auth/me');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.authenticated) {
+                        window.location.href = '/dashboard';
+                    }
+                }
+            } catch (e) {}
+        };
+    </script>
+</body>
+</html>
