@@ -40,8 +40,8 @@
             70% { transform: scale(1.1); box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
             100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
         }
-        #attack-map { height: 380px; width: 100%; border-radius: 0.5rem; }
-        .leaflet-container { background: #0f172a !important; }
+        #attack-map { height: 380px; width: 100%; border-radius: 0.5rem; position: relative; z-index: 1; }
+        .leaflet-container { background: #0f172a !important; z-index: 1 !important; }
     </style>
 </head>
 <body class="text-slate-200 min-h-screen">
@@ -187,8 +187,8 @@
     </main>
 
     <!-- Deploy Token Modal -->
-    <div id="token-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-socCard border border-socBorder rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+    <div id="token-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4">
+        <div class="bg-socCard border border-socBorder rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl relative z-10">
             <div class="flex justify-between items-center border-b border-socBorder pb-3">
                 <h3 class="text-sm font-bold text-white">Deploy New Deception Asset</h3>
                 <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white">&times;</button>
