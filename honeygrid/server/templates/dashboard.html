@@ -164,6 +164,7 @@
                                 <th class="p-3.5">Triggers</th>
                                 <th class="p-3.5">Created</th>
                                 <th class="p-3.5">Canary Endpoint</th>
+                                <th class="p-3.5 text-right">Trap Deployment</th>
                             </tr>
                         </thead>
                         <tbody id="tokens-table-body" class="divide-y divide-socBorder/50 font-mono"></tbody>
@@ -191,34 +192,87 @@
 
     <!-- Deploy Token Modal -->
     <div id="token-modal" style="display: none; z-index: 999999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
-        <div class="bg-socCard border border-socBorder rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl relative z-10">
-            <div class="flex justify-between items-center border-b border-socBorder pb-3">
-                <h3 class="text-sm font-bold text-white">Deploy New Deception Asset</h3>
-                <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white">&times;</button>
+        <div class="bg-socCard border border-socBorder rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative z-10">
+            <!-- View 1: Creation Form -->
+            <div id="modal-form-view" class="space-y-4">
+                <div class="flex justify-between items-center border-b border-socBorder pb-3">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center gap-2">🛡️ Deploy Deception Asset</h3>
+                        <p class="text-[11px] text-slate-400">Create downloadable decoy files to plant in local or cloud storage</p>
+                    </div>
+                    <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white">&times;</button>
+                </div>
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block text-slate-400 mb-1 font-medium">Honeytoken Type</label>
+                        <select id="modal-type" class="w-full bg-slate-900 border border-socBorder rounded p-2 text-white focus:border-socCrimson focus:outline-none">
+                            <option value="pdf">📄 Canary PDF Document (Payroll / Executive Decoy)</option>
+                            <option value="env">⚙️ Decoy .env Secrets File (Production DB & API Keys)</option>
+                            <option value="aws">☁️ AWS IAM Credentials File (~/.aws/credentials)</option>
+                            <option value="git">📦 Decoy Git Repository (.git/config Remote Trap)</option>
+                            <option value="keepass">🔐 Decoy KeePass Vault (passwords.kdbx)</option>
+                            <option value="web">🌐 Web / API Canary Tracking URL</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1 font-medium">Decoy Label / Filename</label>
+                        <input id="modal-label" type="text" placeholder="e.g. Executive_Salaries_2026" class="w-full bg-slate-900 border border-socBorder rounded p-2 text-white font-mono focus:border-socCrimson focus:outline-none" />
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1 font-medium">Placement Notes (Where will you store it?)</label>
+                        <input id="modal-desc" type="text" placeholder="e.g. Planted in Google Drive & Finance SMB share" class="w-full bg-slate-900 border border-socBorder rounded p-2 text-white focus:border-socCrimson focus:outline-none" />
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-2 pt-2 border-t border-socBorder/50">
+                    <button onclick="closeModal('token-modal')" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
+                    <button id="modal-submit-btn" onclick="submitNewToken()" class="px-4 py-1.5 text-xs bg-socCrimson hover:bg-red-600 text-white rounded font-medium transition shadow-lg shadow-red-900/30">Generate Trap File</button>
+                </div>
             </div>
-            <div class="space-y-3 text-xs">
-                <div>
-                    <label class="block text-slate-400 mb-1">Honeytoken Type</label>
-                    <select id="modal-type" class="w-full bg-slate-900 border border-socBorder rounded p-2 text-white">
-                        <option value="web">Web / API Canary URL</option>
-                        <option value="aws">AWS IAM Credentials (AKIA...)</option>
-                        <option value="env">Production .env File Decoy</option>
-                        <option value="git">Decoy Git Repository (.git/config)</option>
-                        <option value="pdf">Canary PDF Document</option>
-                    </select>
+
+            <!-- View 2: Download & Deployment Ready -->
+            <div id="modal-success-view" class="hidden space-y-4">
+                <div class="flex justify-between items-center border-b border-socBorder pb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center text-xs">✓</span>
+                        <h3 class="text-sm font-bold text-white">Deception Asset Ready</h3>
+                    </div>
+                    <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white">&times;</button>
                 </div>
-                <div>
-                    <label class="block text-slate-400 mb-1">Decoy Label</label>
-                    <input id="modal-label" type="text" placeholder="e.g. Finance-Drive-Link" class="w-full bg-slate-900 border border-socBorder rounded p-2 text-white" />
+
+                <div class="bg-emerald-950/40 border border-emerald-500/30 rounded-lg p-3 text-xs text-emerald-300 flex items-center gap-2">
+                    <span>⚡</span> <span>Decoy generated! Download the file below and save it to your storage to catch intruders.</span>
                 </div>
-                <div>
-                    <label class="block text-slate-400 mb-1">Context Notes</label>
-                    <input id="modal-desc" type="text" placeholder="e.g. Planted in staging server /var/www" class="w-full bg-slate-900 border border-socBorder rounded p-2 text-white" />
+
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block text-slate-400 mb-1">Download Trap File:</label>
+                        <a id="modal-download-link" href="#" download class="w-full py-2.5 px-4 bg-socCrimson hover:bg-red-600 text-white font-bold rounded flex items-center justify-center gap-2 transition shadow-lg shadow-red-900/40 text-xs">
+                            📥 Download Decoy File
+                        </a>
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-400 mb-1">Canary Callback URL:</label>
+                        <div class="flex items-center gap-1.5">
+                            <input id="modal-canary-url-display" type="text" readonly class="w-full bg-slate-950 border border-socBorder rounded p-2 text-slate-300 font-mono text-[11px]" />
+                            <button onclick="copyToClipboard(document.getElementById('modal-canary-url-display').value)" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded border border-socBorder text-xs whitespace-nowrap">
+                                📋 Copy
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900/80 border border-socBorder rounded p-3 text-[11px] space-y-1">
+                        <div class="font-bold text-amber-400 uppercase tracking-wider text-[10px]">🎯 Placement Guide</div>
+                        <div id="modal-instructions" class="text-slate-300 leading-relaxed">
+                            Save this file into your storage. When an unauthorized user or spy opens it, HoneyGrid triggers an instant alert.
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="flex justify-end space-x-2 pt-2">
-                <button onclick="closeModal('token-modal')" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
-                <button onclick="submitNewToken()" class="px-4 py-1.5 text-xs bg-socCrimson hover:bg-red-600 text-white rounded font-medium">Generate Decoy</button>
+
+                <div class="flex justify-between items-center pt-2 border-t border-socBorder/50">
+                    <button onclick="resetModalToForm()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white">+ Deploy Another</button>
+                    <button onclick="closeModal('token-modal')" class="px-4 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-white rounded font-medium border border-socBorder">Close & View in SOC</button>
+                </div>
             </div>
         </div>
     </div>
@@ -336,19 +390,34 @@
         function renderTokens(tokens) {
             const tbody = document.getElementById('tokens-table-body');
             if (!tokens.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-500 font-sans">No tokens deployed.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-500 font-sans">No tokens deployed.</td></tr>';
                 return;
             }
-            tbody.innerHTML = tokens.map(t => `
+            tbody.innerHTML = tokens.map(t => {
+                const canaryUrl = t.metadata?.canary_url || '';
+                return `
                 <tr class="hover:bg-slate-800/40 transition">
                     <td class="p-3.5 text-socCyan font-bold">${t.id}</td>
-                    <td class="p-3.5 text-amber-400 uppercase">${t.token_type}</td>
+                    <td class="p-3.5 text-amber-400 uppercase text-[10px] font-sans">
+                        <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700">${t.token_type}</span>
+                    </td>
                     <td class="p-3.5 text-white font-sans">${t.label}</td>
                     <td class="p-3.5 font-bold text-socCrimson">${t.trigger_count}</td>
                     <td class="p-3.5 text-slate-400">${t.created_at.substring(0, 10)}</td>
-                    <td class="p-3.5 text-slate-400 font-sans truncate max-w-[220px]">${t.metadata.canary_url || 'File Tripwire'}</td>
+                    <td class="p-3.5 text-slate-400 font-sans truncate max-w-[180px]" title="${canaryUrl}">${canaryUrl || 'Tripwire'}</td>
+                    <td class="p-3.5 text-right space-x-1.5 whitespace-nowrap">
+                        <a href="/api/tokens/${t.id}/download" download class="px-2.5 py-1 bg-socCrimson/20 hover:bg-socCrimson/30 text-red-300 border border-red-500/40 rounded text-[11px] font-sans inline-flex items-center gap-1 transition">
+                            📥 Download
+                        </a>
+                        ${canaryUrl ? `
+                        <button onclick="copyToClipboard('${canaryUrl}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-socBorder rounded text-[11px] font-sans inline-flex items-center gap-1 transition" title="Copy Canary URL">
+                            📋 Copy
+                        </button>
+                        ` : ''}
+                    </td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
         }
 
         function generateExecutiveReport(stats, incidents) {
@@ -406,18 +475,82 @@ intercepted by the Sentinel listener, unmasking attacker hardware and network or
         }
 
         async function submitNewToken() {
+            const submitBtn = document.getElementById('modal-submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Synthesizing Trap...';
+
             const type = document.getElementById('modal-type').value;
-            const label = document.getElementById('modal-label').value || 'Web-Decoy';
+            const label = document.getElementById('modal-label').value || `Decoy-${type.toUpperCase()}`;
             const desc = document.getElementById('modal-desc').value || '';
-            const res = await fetch('/api/tokens/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token_type: type, label: label, description: desc })
-            });
-            if (res.ok) {
-                closeModal('token-modal');
-                refreshData();
+            try {
+                const res = await fetch('/api/tokens/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token_type: type, label: label, description: desc })
+                });
+                const data = await res.json();
+                if (res.ok && data.status === 'success') {
+                    showModalSuccess(data);
+                    refreshData();
+                } else {
+                    alert('Failed to generate decoy: ' + (data.message || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error generating token: ' + e.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Generate Trap File';
             }
+        }
+
+        function showModalSuccess(data) {
+            document.getElementById('modal-form-view').classList.add('hidden');
+            document.getElementById('modal-success-view').classList.remove('hidden');
+
+            const dlLink = document.getElementById('modal-download-link');
+            dlLink.href = data.download_url;
+
+            const canaryDisplay = document.getElementById('modal-canary-url-display');
+            canaryDisplay.value = data.canary_url || '';
+
+            const instructionsEl = document.getElementById('modal-instructions');
+            const tokenType = (data.token.token_type || '').toLowerCase();
+
+            if (tokenType.includes('pdf')) {
+                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Save this PDF in your local <code>Documents</code> folder, OneDrive, or Google Drive. When an unauthorized user, spy, or malware opens it, HoneyGrid immediately tracks their IP, unmasks their ISP & location, and triggers a Discord SOC alert.`;
+                dlLink.innerText = `📥 Download Canary PDF (${data.token.label}.pdf)`;
+            } else if (tokenType.includes('env')) {
+                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Drop this <code>.env</code> file in a project folder or backup archive. When an adversary extracts or inspects it, any attempt to verify the database or sync URL trips the alarm.`;
+                dlLink.innerText = `📥 Download Decoy .env File`;
+            } else if (tokenType.includes('aws')) {
+                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Save as <code>~/.aws/credentials</code>. Automated bots, infostealers, or malicious insiders searching for AWS secrets will trip the canary immediately.`;
+                dlLink.innerText = `📥 Download AWS Credentials File`;
+            } else if (tokenType.includes('git')) {
+                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Extract this archive into your dev workspace. If anyone runs <code>git pull</code> or <code>git fetch</code>, the remote origin canary trips the trap.`;
+                dlLink.innerText = `📥 Download Git Decoy (.zip)`;
+            } else if (tokenType.includes('keepass')) {
+                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Place this <code>passwords.kdbx</code> database on your Desktop or file share. Any attempt to inspect or open this fake password vault alerts the SOC.`;
+                dlLink.innerText = `📥 Download KeePass Vault (.kdbx)`;
+            } else {
+                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Embed this Canary URL inside corporate wikis, internal tickets, or confidential documents. Any click logs the visitor's hardware & network telemetry.`;
+                dlLink.innerText = `📥 Download Canary URL Shortcut`;
+            }
+        }
+
+        function resetModalToForm() {
+            document.getElementById('modal-form-view').classList.remove('hidden');
+            document.getElementById('modal-success-view').classList.add('hidden');
+            document.getElementById('modal-label').value = '';
+            document.getElementById('modal-desc').value = '';
+        }
+
+        function copyToClipboard(text) {
+            if (!text) return;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied canary URL to clipboard: ' + text);
+            }).catch(() => {
+                prompt('Copy this canary URL:', text);
+            });
         }
 
         function switchTab(tab) {
@@ -431,7 +564,10 @@ intercepted by the Sentinel listener, unmasking attacker hardware and network or
 
         function openModal(id) {
             const el = document.getElementById(id);
-            if (el) el.style.display = 'flex';
+            if (el) {
+                if (id === 'token-modal') resetModalToForm();
+                el.style.display = 'flex';
+            }
         }
         function closeModal(id) {
             const el = document.getElementById(id);

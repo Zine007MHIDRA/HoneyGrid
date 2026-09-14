@@ -18,7 +18,7 @@ from honeygrid.alerts.discord import send_discord_alert
 from honeygrid.core.containment import block_ip
 from honeygrid.core.generator import (
     create_web_canary_token, create_aws_honeytoken, create_env_honeytoken,
-    create_git_honeytoken, create_keepass_honeytoken
+    create_git_honeytoken, create_keepass_honeytoken, generate_token_download_payload
 )
 from honeygrid.core.pdf_canary import create_canary_pdf
 
@@ -153,10 +153,39 @@ async def api_create_token(data: Dict[str, Any]):
         token, _ = create_git_honeytoken(f"traps/git_decoy_{label}", label)
     elif token_type == "pdf":
         token, _ = create_canary_pdf(f"traps/{label}.pdf", label)
+    elif token_type == "keepass":
+        token, _ = create_keepass_honeytoken(f"traps/{label}.kdbx", label)
     else:
         token, _ = create_web_canary_token(label, desc)
         
-    return {"status": "success", "token": token.model_dump()}
+    return {
+        "status": "success",
+        "token": token.model_dump(),
+        "download_url": f"/api/tokens/{token.id}/download",
+        "canary_url": token.metadata.get("canary_url", f"{settings.HONEYGRID_BASE_URL}/t/{token.id}")
+    }
+
+@app.get("/api/tokens/{token_id}/download")
+async def api_download_token(token_id: str):
+    """Dynamically generates and downloads the file trap for deployment to disk/storage."""
+    token = get_token(token_id)
+    if not token:
+        return JSONResponse({"status": "error", "message": "Honeytoken not found"}, status_code=404)
+    
+    try:
+        content_bytes, filename, media_type = generate_token_download_payload(token)
+        return Response(
+            content=content_bytes,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": f"Failed to generate download: {str(e)}"}, status_code=500)
 
 @app.post("/api/contain/isolate")
 async def api_isolate_ip(data: Dict[str, Any]):

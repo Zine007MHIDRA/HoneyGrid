@@ -1,6 +1,8 @@
 import uuid
 import secrets
 import string
+import io
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Tuple
@@ -167,4 +169,78 @@ def create_keepass_honeytoken(output_path: str, label: str = "Corporate-KeePass-
         description=f"Decoy KeePass Database Vault at {out_file.resolve()}"
     )
     return token, str(out_file.resolve())
+
+
+def generate_token_download_payload(token: Token) -> Tuple[bytes, str, str]:
+    """
+    Returns (bytes_content, filename, mime_type) for dynamic file download
+    of any deception asset.
+    """
+    token_type = token.token_type.lower()
+    clean_label = "".join(c for c in token.label if c.isalnum() or c in ("-", "_")).strip() or "honeytoken"
+    canary_url = token.metadata.get("canary_url", f"{settings.HONEYGRID_BASE_URL}/t/{token.id}")
+    
+    if token_type in ("canary_pdf", "pdf"):
+        from honeygrid.core.pdf_canary import generate_canary_pdf_bytes
+        pdf_bytes = generate_canary_pdf_bytes(token.id, token.label)
+        filename = f"{clean_label}.pdf"
+        return pdf_bytes, filename, "application/pdf"
+        
+    elif token_type in ("aws", "aws_key"):
+        content = token.metadata.get("raw_content")
+        if not content:
+            access_key_id = token.metadata.get("access_key_id", f"AKIA{secrets.token_hex(8).upper()}")
+            content = f"""[default]
+aws_access_key_id = {access_key_id}
+aws_secret_access_key = {secrets.token_urlsafe(30)}
+# Verify internal auth gateway: {canary_url}
+region = us-east-1
+"""
+        return content.encode("utf-8"), "credentials", "text/plain"
+        
+    elif token_type in ("env", "env_file"):
+        content = token.metadata.get("file_content")
+        if not content:
+            content = f"""# Production Environment Secrets - Internal Confidential
+NODE_ENV=production
+PORT=443
+DATABASE_URL=postgres://admin_user:{secrets.token_hex(12)}@db.internal.corp:5432/primary_prod
+INTERNAL_API_SYNC_URL={canary_url}
+STRIPE_SECRET_KEY=sk_live_{secrets.token_urlsafe(24)}
+GITHUB_ENTERPRISE_TOKEN=ghp_{secrets.token_urlsafe(32)}
+"""
+        return content.encode("utf-8"), ".env", "text/plain"
+        
+    elif token_type in ("git", "git_repo"):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            git_config = f"""[core]
+\trepositoryformatversion = 0
+\tfilemode = false
+\tbare = false
+\tlogallrefupdates = true
+[remote "origin"]
+\turl = {canary_url}
+\tfetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+\tremote = origin
+\tmerge = refs/heads/main
+"""
+            zf.writestr(".git/config", git_config)
+            zf.writestr("README.md", "# Internal Automation Scripts\nCONFIDENTIAL - Property of Corporate DevSecOps.\n")
+        return buf.getvalue(), f"{clean_label}-git-repo.zip", "application/zip"
+        
+    elif token_type in ("keepass", "honeyfile"):
+        kdbx_signature = b"\x03\xd9\xa2\x9a\x67\xfb\x4b\xb5\x00\x00\x04\x00"
+        pseudo_data = secrets.token_bytes(4096)
+        filename = f"{clean_label}.kdbx" if not clean_label.endswith(".kdbx") else clean_label
+        return kdbx_signature + pseudo_data, filename, "application/octet-stream"
+        
+    else:  # web or generic canary
+        shortcut = f"""[InternetShortcut]
+URL={canary_url}
+Comment=Corporate Verification Portal
+"""
+        return shortcut.encode("utf-8"), f"{clean_label}-shortcut.url", "text/plain"
+
 
