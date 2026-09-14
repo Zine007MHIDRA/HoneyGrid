@@ -7,10 +7,27 @@ from honeygrid.config import settings
 from honeygrid.models import Token, IncidentEvent, BrowserTelemetry
 
 def get_db_path() -> str:
-    """Returns database file path, auto-switching to /tmp if running in serverless environments like Vercel."""
-    if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    """Returns database file path, auto-switching to /tmp if running in serverless environments like Vercel or on read-only filesystems."""
+    if (
+        os.environ.get("VERCEL")
+        or os.environ.get("VERCEL_ENV")
+        or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+        or os.environ.get("LAMBDA_TASK_ROOT")
+    ):
         return "/tmp/honeygrid.db"
-    return settings.HONEYGRID_DB_PATH
+    
+    # Try testing writability of configured path
+    try:
+        p = Path(settings.HONEYGRID_DB_PATH)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        test_file = p.parent / ".perm_check"
+        with open(test_file, "w") as f:
+            f.write("1")
+        test_file.unlink(missing_ok=True)
+        return str(p)
+    except Exception:
+        return "/tmp/honeygrid.db"
+
 
 def get_db_connection() -> sqlite3.Connection:
     db_path = get_db_path()

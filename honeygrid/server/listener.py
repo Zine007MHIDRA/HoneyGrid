@@ -35,11 +35,20 @@ TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 TRANSPARENT_GIF_BYTES = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
 
 def get_template(name: str) -> str:
-    path = TEMPLATES_DIR / name
-    if path.exists():
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+    candidate_paths = [
+        TEMPLATES_DIR / name,
+        Path(os.getcwd()) / "honeygrid" / "server" / "templates" / name,
+        Path(__file__).resolve().parent.parent / "templates" / name,
+    ]
+    for path in candidate_paths:
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except Exception:
+                pass
     return ""
+
 
 def process_incident_telemetry(event: IncidentEvent):
     """Background task to record incident and dispatch Discord alert."""
