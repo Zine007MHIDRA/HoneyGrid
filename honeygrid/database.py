@@ -117,6 +117,16 @@ def init_db():
         FOREIGN KEY(token_id) REFERENCES tokens(id)
     )
     """)
+
+    # Table for Operator Safe List (Allowlist)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS safe_ips (
+        ip TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        added_at TEXT NOT NULL,
+        added_by TEXT NOT NULL
+    )
+    """)
     
     # Migration helper for tokens: ensure owner_id and owner_email exist
     cursor.execute("PRAGMA table_info(tokens)")
@@ -245,6 +255,60 @@ def delete_session(session_token: str):
     cursor.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
     conn.commit()
     conn.close()
+
+
+# -------------------------------------------------------------
+# Operator Safe List (Allowlist) Helpers
+# -------------------------------------------------------------
+
+def add_safe_ip(ip: str, label: str = "Authorized Operator Workstation", added_by: str = "admin") -> bool:
+    clean_ip = ip.strip()
+    if not clean_ip:
+        return False
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""
+        INSERT OR REPLACE INTO safe_ips (ip, label, added_at, added_by)
+        VALUES (?, ?, ?, ?)
+    """, (clean_ip, label, now_iso, added_by))
+    conn.commit()
+    conn.close()
+    return True
+
+def remove_safe_ip(ip: str) -> bool:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM safe_ips WHERE ip = ?", (ip.strip(),))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+def list_safe_ips() -> List[Dict[str, Any]]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM safe_ips ORDER BY added_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def is_safe_ip(ip: str) -> bool:
+    clean_ip = ip.strip()
+    if not clean_ip:
+        return False
+    # 1. Check environment variable
+    if settings.OPERATOR_SAFE_IPS:
+        configured = [x.strip() for x in settings.OPERATOR_SAFE_IPS.split(",") if x.strip()]
+        if clean_ip in configured:
+            return True
+    # 2. Check safe_ips table
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM safe_ips WHERE ip = ?", (clean_ip,))
+    row = cursor.fetchone()
+    conn.close()
+    return row is not None
 
 # -------------------------------------------------------------
 # Honeytoken & Incident Operations

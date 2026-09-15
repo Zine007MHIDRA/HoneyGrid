@@ -28,7 +28,14 @@ def send_discord_alert(event: IncidentEvent, token: Optional[Token] = None) -> b
         geo_summary = "Local / Internal Network (Loopback or RFC1918)"
         
     # Threat score badge
-    score_indicator = "🔴 HIGH RISK" if event.threat_score >= 60 else ("🟠 ELEVATED" if event.threat_score >= 30 else "🟡 MODERATE")
+    if event.connection_type == "Authorized Operator Test" or event.threat_score == 0:
+        score_indicator = "🟢 0% RISK (OPERATOR TEST)"
+    elif event.threat_score >= 60:
+        score_indicator = "🔴 HIGH RISK"
+    elif event.threat_score >= 30:
+        score_indicator = "🟠 ELEVATED"
+    else:
+        score_indicator = "🟡 MODERATE"
 
     embed_fields = [
         {
@@ -99,15 +106,22 @@ def send_discord_alert(event: IncidentEvent, token: Optional[Token] = None) -> b
         }
     ])
 
-    embed_color = 0xE74C3C if event.threat_score >= 50 else 0xE67E22
+    if event.connection_type == "Authorized Operator Test" or event.threat_score == 0:
+        embed_color = 0x10B981
+        embed_title = "🟢 AUDIT / TEST: CANARY VERIFIED BY OPERATOR"
+        embed_desc = f"Authorized operator test detected from Safe-Listed IP `{event.attacker_ip}`. Active threat response is suppressed."
+    else:
+        embed_color = 0xE74C3C if event.threat_score >= 50 else 0xE67E22
+        embed_title = "🚨 SECURITY INCIDENT: HONEYTOKEN TRIPPED"
+        embed_desc = "An adversary has touched a monitored deception asset. Immediate incident triage is recommended."
 
     payload = {
         "username": "HoneyGrid Sentinel",
         "avatar_url": "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/solid/shield-halved.svg",
         "embeds": [
             {
-                "title": "🚨 SECURITY INCIDENT: HONEYTOKEN TRIPPED",
-                "description": f"An adversary has touched a monitored deception asset. Immediate incident triage is recommended.",
+                "title": embed_title,
+                "description": embed_desc,
                 "color": embed_color,
                 "fields": embed_fields,
                 "footer": {

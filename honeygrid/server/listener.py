@@ -11,10 +11,12 @@ from honeygrid.database import (
     init_db, get_token, record_incident, list_tokens, list_incidents,
     get_dashboard_stats, update_incident_telemetry,
     create_user, get_user_by_email, get_user_auth_record_by_email, get_user_by_id,
-    create_session, get_user_by_session, delete_session
+    create_session, get_user_by_session, delete_session,
+    add_safe_ip, remove_safe_ip, list_safe_ips, is_safe_ip
 )
 from honeygrid.models import IncidentEvent, Token, BrowserTelemetry, User, UserRegister, UserLogin
 from honeygrid.core.auth import hash_password, verify_password, generate_captcha, verify_captcha
+from honeygrid.core.rate_limit import login_limiter
 from honeygrid.core.fingerprint import extract_client_ip, identify_client_tool
 from honeygrid.core.geo import lookup_ip_geolocation
 from honeygrid.core.threat_intel import analyze_ip_threat
@@ -34,6 +36,49 @@ app = FastAPI(
     description="Deception Sentinel & Multi-Tenant Incident Response SOC Service",
     version="2.0.0"
 )
+
+def is_https_request(request: Request) -> bool:
+    """Detects whether request reached service over HTTPS (direct or through cloud reverse proxy)."""
+    proto = request.headers.get("x-forwarded-proto", "").lower()
+    ssl = request.headers.get("x-forwarded-ssl", "").lower()
+    return request.url.scheme == "https" or proto == "https" or ssl == "on"
+
+@app.middleware("http")
+async def enterprise_security_headers_middleware(request: Request, call_next):
+    """
+    Applies defense-in-depth HTTP security headers for operator sessions,
+    and deceptive stealth cloaking on public canary tripwire endpoints.
+    """
+    response = await call_next(request)
+    
+    path = request.url.path
+    is_canary = path.startswith("/t/") or path == "/.env" or path.startswith("/api/v1/auth")
+    
+    if is_canary:
+        # DECEPTION STEALTH MODE: Cloak framework and disguise as production web server
+        response.headers["Server"] = "nginx/1.24.0 (Ubuntu)"
+        if "x-powered-by" in response.headers:
+            del response.headers["x-powered-by"]
+    else:
+        # OPERATOR DEFENSE HEADERS: Block clickjacking, MIME sniffing, and unauthorized framing
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: https://*.cartocdn.com https://*.openstreetmap.org; "
+            "connect-src 'self' https://*.cartocdn.com; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self';"
+        )
+        if is_https_request(request):
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+
+    return response
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -93,6 +138,12 @@ def process_incident_async(
         reported_ip = geo.get("query_ip") if is_local and geo.get("query_ip") else raw_ip
         threat_profile = analyze_ip_threat(reported_ip, geo)
 
+        # Check if caller IP is on Operator Safe List
+        is_safe = is_safe_ip(reported_ip)
+        threat_score = 0 if is_safe else threat_profile.get("threat_score", 15)
+        connection_type = "Authorized Operator Test" if is_safe else threat_profile.get("connection_type", "Unknown")
+        mitre = "Audit / Authorized Operator Validation" if is_safe else "T1552: Unsecured Credentials"
+
         event = IncidentEvent(
             token_id=token_id,
             attacker_ip=reported_ip,
@@ -109,12 +160,12 @@ def process_incident_async(
             geo_asn=geo.get("asn", "Unknown"),
             geo_lat=geo.get("lat"),
             geo_lon=geo.get("lon"),
-            threat_score=threat_profile.get("threat_score", 15),
-            connection_type=threat_profile.get("connection_type", "Unknown"),
-            is_vpn_proxy=threat_profile.get("is_vpn_proxy", False),
-            is_tor=threat_profile.get("is_tor", False),
+            threat_score=threat_score,
+            connection_type=connection_type,
+            is_vpn_proxy=False if is_safe else threat_profile.get("is_vpn_proxy", False),
+            is_tor=False if is_safe else threat_profile.get("is_tor", False),
             raw_headers=headers_dict,
-            mitre_technique="T1552: Unsecured Credentials"
+            mitre_technique=mitre
         )
         
         token = get_token(token_id)
@@ -181,7 +232,7 @@ async def api_captcha():
     }
 
 @app.post("/api/auth/register")
-async def api_register(data: UserRegister):
+async def api_register(data: UserRegister, request: Request):
     # 1. Anti-bot honeypot check
     if data.hp_decoy_field:
         return JSONResponse({"status": "error", "message": "Automated bot activity detected and blocked."}, status_code=403)
@@ -221,14 +272,29 @@ async def api_register(data: UserRegister):
         max_age=settings.SESSION_EXPIRE_HOURS * 3600,
         httponly=True,
         samesite="lax",
-        secure=False
+        secure=is_https_request(request)
     )
     return resp
 
 @app.post("/api/auth/login")
-async def api_login(data: UserLogin):
+async def api_login(data: UserLogin, request: Request):
+    client_ip, _ = extract_client_ip(request)
+
+    # 0. Brute-Force Rate Limiting & Lockout Check
+    is_locked, remaining = login_limiter.is_locked(client_ip)
+    if is_locked:
+        return JSONResponse(
+            {
+                "status": "error",
+                "message": f"Too many failed login attempts. Temporarily locked for {remaining} seconds to safeguard your account."
+            },
+            status_code=429,
+            headers={"Retry-After": str(remaining)}
+        )
+
     # 1. Anti-bot honeypot check
     if data.hp_decoy_field:
+        login_limiter.record_failure(client_ip)
         return JSONResponse({"status": "error", "message": "Automated bot activity detected and blocked."}, status_code=403)
 
     # 2. CAPTCHA verification
@@ -242,7 +308,15 @@ async def api_login(data: UserLogin):
     
     record = get_user_auth_record_by_email(email)
     if not record or not verify_password(password, record["password_hash"], record["salt"]):
-        return JSONResponse({"status": "error", "message": "Invalid email or access passphrase."}, status_code=401)
+        failures = login_limiter.record_failure(client_ip)
+        remaining_attempts = max(0, 5 - failures)
+        msg = "Invalid email or access passphrase."
+        if 0 < remaining_attempts < 4:
+            msg += f" {remaining_attempts} attempt(s) remaining before temporary lockout."
+        return JSONResponse({"status": "error", "message": msg}, status_code=401)
+
+    # Successful login: reset rate limit strikes
+    login_limiter.record_success(client_ip)
     
     user_role = record["role"]
     if email == settings.ADMIN_EMAIL.lower():
@@ -269,7 +343,7 @@ async def api_login(data: UserLogin):
         max_age=expire_hours * 3600,
         httponly=True,
         samesite="lax",
-        secure=False
+        secure=is_https_request(request)
     )
     return resp
 
@@ -292,6 +366,51 @@ async def api_me(request: Request):
 # -------------------------------------------------------------
 # REST API Endpoints for SOC Dashboard (Multi-Tenant Scoped)
 # -------------------------------------------------------------
+
+
+# -------------------------------------------------------------
+# Operator Safe List Endpoints (Allowlist Management)
+# -------------------------------------------------------------
+
+@app.get("/api/safelist")
+async def api_get_safelist(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    client_ip, _ = extract_client_ip(request)
+    return {
+        "status": "success",
+        "safe_ips": list_safe_ips(),
+        "client_ip": client_ip,
+        "is_client_safe": is_safe_ip(client_ip)
+    }
+
+@app.post("/api/safelist/add")
+async def api_add_safelist(request: Request, data: Dict[str, Any]):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    
+    ip = data.get("ip") or extract_client_ip(request)[0]
+    label = data.get("label", f"Operator Workstation ({user.email})")
+    
+    success = add_safe_ip(ip, label=label, added_by=user.email)
+    if success:
+        return {"status": "success", "message": f"IP {ip} added to Operator Safe List."}
+    return JSONResponse({"status": "error", "message": "Invalid IP address"}, status_code=400)
+
+@app.post("/api/safelist/remove")
+async def api_remove_safelist(request: Request, data: Dict[str, Any]):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    
+    ip = data.get("ip")
+    if not ip:
+        return JSONResponse({"status": "error", "message": "IP required"}, status_code=400)
+        
+    removed = remove_safe_ip(ip)
+    return {"status": "success", "removed": removed, "message": f"IP {ip} removed from Operator Safe List."}
 
 @app.get("/api/stats")
 async def api_stats(request: Request):
@@ -387,6 +506,15 @@ async def api_isolate_ip(request: Request, data: Dict[str, Any]):
     ip = data.get("ip")
     if not ip:
         return JSONResponse({"status": "error", "message": "IP required"}, status_code=400)
+        
+    # Operator Safety: Block isolation if IP is on Safe List
+    if is_safe_ip(ip):
+        return JSONResponse({
+            "status": "error",
+            "applied": False,
+            "message": f"IP {ip} is on the Operator Safe List. Auto-containment blocked to safeguard operator connectivity."
+        }, status_code=400)
+
     result = block_ip(ip)
     return result
 

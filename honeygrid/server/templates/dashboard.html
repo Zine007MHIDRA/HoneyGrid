@@ -12,7 +12,73 @@
 
     <!-- Tailwind CSS CDN with Custom Theme Tokens -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Modal: Operator Safe List (Allowlist) -->
+    <div id="safelist-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" style="display: none;">
+        <div class="bezel-card w-full max-w-lg">
+            <div class="bezel-inner p-6 space-y-4">
+                <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-white font-sans">Operator Safe List</h3>
+                            <p class="text-[11px] text-slate-400 font-sans">Suppresses false alarms and prevents accidental SOAR isolation of your IP</p>
+                        </div>
+                    </div>
+                    <button onclick="closeModal('safelist-modal')" class="text-slate-400 hover:text-white p-1">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between text-xs">
+                    <div>
+                        <span class="text-slate-400 font-sans">Your Current Network IP:</span>
+                        <span id="detected-client-ip" class="font-mono text-emerald-400 font-bold ml-1.5">Detecting...</span>
+                    </div>
+                    <button onclick="addCurrentIpToSafeList()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-md transition active:scale-95">
+                        + Safe-List My IP
+                    </button>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="block text-xs font-medium text-slate-300 font-sans">Add IP Manually</label>
+                    <div class="flex gap-2">
+                        <input id="new-safe-ip" type="text" placeholder="e.g. 198.51.100.25 or 10.0.0.5" class="flex-1 input-box px-3.5 py-2 rounded-xl text-xs font-mono" />
+                        <button onclick="addNewSafeIp()" class="px-4 py-2 bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/10 rounded-xl text-xs font-medium transition">
+                            Add to Safe List
+                        </button>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-xs font-medium text-slate-300 font-sans">Active Safe List Entries</label>
+                    <div id="safelist-items" class="max-h-48 overflow-y-auto space-y-1 divide-y divide-white/[0.04] text-xs font-mono p-1">
+                        <div class="text-slate-500 text-center py-4">Loading safe list...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function sanitizeJsArg(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/[^a-zA-Z0-9\.\:\-_]/g, '');
+        }
+
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -181,6 +247,14 @@
                     </span>
                     <span>DEFENSE GRID: LIVE</span>
                 </div>
+
+                <!-- Safe List Allowlist Button -->
+                <button onclick="openModal('safelist-modal')" class="group inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] rounded-lg transition-all duration-200 active:scale-[0.98]" title="Manage Operator Safe List (Allowlist)">
+                    <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <span>Safe List</span>
+                </button>
 
                 <button onclick="refreshData()" class="group inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] rounded-lg transition-all duration-200 active:scale-[0.98]">
                     <svg class="w-3.5 h-3.5 text-slate-400 group-hover:rotate-180 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -624,13 +698,13 @@
                     marker.bindPopup(`
                         <div class="space-y-1.5 font-sans">
                             <div class="flex items-center justify-between gap-2 border-b border-white/10 pb-1">
-                                <span class="font-bold text-rose-400 font-mono text-xs">${inc.attacker_ip}</span>
-                                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${inc.threat_score >= 70 ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}">${inc.threat_score}% Threat</span>
+                                <span class="font-bold text-rose-400 font-mono text-xs">${escapeHtml(inc.attacker_ip)}</span>
+                                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${inc.threat_score >= 70 ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}">${escapeHtml(inc.threat_score)}% Threat</span>
                             </div>
-                            <div class="text-slate-300"><strong>Location:</strong> ${inc.geo_city || 'Unknown'}, ${inc.geo_country}</div>
-                            <div class="text-slate-400"><strong>ISP:</strong> ${inc.geo_isp}</div>
-                            <div class="text-slate-400"><strong>Vector:</strong> ${inc.connection_type}</div>
-                            <div class="pt-1 text-[9px] text-slate-500 font-mono">${inc.timestamp.substring(0, 19)}</div>
+                            <div class="text-slate-300"><strong>Location:</strong> ${escapeHtml(inc.geo_city || 'Unknown')}, ${escapeHtml(inc.geo_country)}</div>
+                            <div class="text-slate-400"><strong>ISP:</strong> ${escapeHtml(inc.geo_isp)}</div>
+                            <div class="text-slate-400"><strong>Vector:</strong> ${escapeHtml(inc.connection_type)}</div>
+                            <div class="pt-1 text-[9px] text-slate-500 font-mono">${escapeHtml(inc.timestamp.substring(0, 19))}</div>
                         </div>
                     `);
                 }
@@ -649,33 +723,34 @@
                 if (inc.threat_score >= 70) badgeClass = "bg-rose-500/20 text-rose-400 border-rose-500/30";
                 else if (inc.threat_score >= 40) badgeClass = "bg-amber-500/20 text-amber-400 border-amber-500/30";
 
-                const gpu = inc.gpu_renderer ? `<div class="text-[10px] text-cyan-400 truncate max-w-[150px]" title="${inc.gpu_renderer}">GPU: ${inc.gpu_renderer.split('/')[0]}</div>` : '';
-                const lanIp = inc.local_lan_ip ? `<div class="text-[10px] text-purple-400">LAN: ${inc.local_lan_ip}</div>` : '';
+                const safeIp = sanitizeJsArg(inc.attacker_ip);
+                const gpu = inc.gpu_renderer ? `<div class="text-[10px] text-cyan-400 truncate max-w-[150px]" title="${escapeHtml(inc.gpu_renderer)}">GPU: ${escapeHtml(inc.gpu_renderer.split('/')[0])}</div>` : '';
+                const lanIp = inc.local_lan_ip ? `<div class="text-[10px] text-purple-400">LAN: ${escapeHtml(inc.local_lan_ip)}</div>` : '';
 
                 return `
                     <tr class="hover:bg-white/[0.02] transition">
-                        <td class="p-3.5 text-slate-400">${inc.timestamp.substring(11, 19)}</td>
+                        <td class="p-3.5 text-slate-400 font-mono">${escapeHtml(inc.timestamp.substring(11, 19))}</td>
                         <td class="p-3.5 font-bold text-white">
-                            <div>${inc.attacker_ip}</div>
-                            <div class="text-[10px] text-slate-500 font-sans">${inc.connection_type}</div>
+                            <div>${escapeHtml(inc.attacker_ip)}</div>
+                            <div class="text-[10px] text-slate-500 font-sans">${escapeHtml(inc.connection_type)}</div>
                         </td>
                         <td class="p-3.5">
-                            <span class="px-2 py-0.5 rounded text-[10px] border ${badgeClass} font-bold font-mono">${inc.threat_score}%</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] border ${badgeClass} font-bold font-mono">${escapeHtml(inc.threat_score)}%</span>
                         </td>
                         <td class="p-3.5">
-                            <div class="text-slate-200 font-sans">${inc.geo_city || 'Local'}, ${inc.geo_country}</div>
-                            <div class="text-[10px] text-slate-500 truncate max-w-[150px] font-sans">${inc.geo_isp}</div>
+                            <div class="text-slate-200 font-sans">${escapeHtml(inc.geo_city || 'Local')}, ${escapeHtml(inc.geo_country)}</div>
+                            <div class="text-[10px] text-slate-500 truncate max-w-[150px] font-sans">${escapeHtml(inc.geo_isp)}</div>
                         </td>
                         <td class="p-3.5 font-sans">
-                            <div class="text-slate-300 text-[11px]">${inc.client_tool}</div>
+                            <div class="text-slate-300 text-[11px]">${escapeHtml(inc.client_tool)}</div>
                             ${gpu}
                             ${lanIp}
                         </td>
                         <td class="p-3.5">
-                            <span class="text-rose-400 font-mono">${inc.token_id}</span>
+                            <span class="text-rose-400 font-mono">${escapeHtml(inc.token_id)}</span>
                         </td>
                         <td class="p-3.5 text-right font-sans">
-                            <button onclick="isolateIP('${inc.attacker_ip}')" class="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800 text-rose-300 rounded text-[10px] font-medium transition active:scale-[0.98]">
+                            <button onclick="isolateIP('${safeIp}')" class="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800 text-rose-300 rounded text-[10px] font-medium transition active:scale-[0.98]">
                                 🛡️ Isolate IP
                             </button>
                         </td>
@@ -692,27 +767,28 @@
             }
             const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.is_admin);
             tbody.innerHTML = tokens.map(t => {
+                const safeTokenId = sanitizeJsArg(t.id);
                 const canaryUrl = t.metadata?.canary_url || '';
-                const ownerTag = (isAdmin && t.owner_email) ? `<div class="text-[10px] text-slate-500 font-sans">Owner: ${t.owner_email}</div>` : '';
+                const ownerTag = (isAdmin && t.owner_email) ? `<div class="text-[10px] text-slate-500 font-sans">Owner: ${escapeHtml(t.owner_email)}</div>` : '';
                 return `
                 <tr class="hover:bg-white/[0.02] transition">
                     <td class="p-3.5 text-cyan-400 font-bold font-mono">
-                        <div>${t.id}</div>
+                        <div>${escapeHtml(t.id)}</div>
                         ${ownerTag}
                     </td>
                     <td class="p-3.5 text-amber-400 uppercase text-[10px] font-sans">
-                        <span class="px-2 py-0.5 rounded bg-black/40 border border-white/[0.08]">${t.token_type}</span>
+                        <span class="px-2 py-0.5 rounded bg-black/40 border border-white/[0.08]">${escapeHtml(t.token_type)}</span>
                     </td>
-                    <td class="p-3.5 text-white font-sans font-medium">${t.label}</td>
-                    <td class="p-3.5 font-bold text-rose-400 font-mono">${t.trigger_count}</td>
-                    <td class="p-3.5 text-slate-400 font-mono">${t.created_at.substring(0, 10)}</td>
-                    <td class="p-3.5 text-slate-400 font-sans truncate max-w-[180px]" title="${canaryUrl}">${canaryUrl || 'Tripwire'}</td>
+                    <td class="p-3.5 text-white font-sans font-medium">${escapeHtml(t.label)}</td>
+                    <td class="p-3.5 font-bold text-rose-400 font-mono">${escapeHtml(t.trigger_count)}</td>
+                    <td class="p-3.5 text-slate-400 font-mono">${escapeHtml(t.created_at.substring(0, 10))}</td>
+                    <td class="p-3.5 text-slate-400 font-sans truncate max-w-[180px]" title="${escapeHtml(canaryUrl)}">${escapeHtml(canaryUrl || 'Tripwire')}</td>
                     <td class="p-3.5 text-right space-x-1.5 whitespace-nowrap font-sans">
-                        <a href="/api/tokens/${t.id}/download" download class="px-2.5 py-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded text-[11px] inline-flex items-center gap-1 transition font-medium">
+                        <a href="/api/tokens/${safeTokenId}/download" download class="px-2.5 py-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded text-[11px] inline-flex items-center gap-1 transition font-medium">
                             📥 Download
                         </a>
                         ${canaryUrl ? `
-                        <button onclick="copyToClipboard('${canaryUrl}')" class="px-2 py-1 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/[0.1] rounded text-[11px] inline-flex items-center gap-1 transition" title="Copy Canary URL">
+                        <button onclick="copyToClipboard('${escapeHtml(canaryUrl)}')" class="px-2 py-1 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/[0.1] rounded text-[11px] inline-flex items-center gap-1 transition" title="Copy Canary URL">
                             📋 Copy
                         </button>
                         ` : ''}
@@ -777,6 +853,86 @@ interfaces without revealing surveillance mechanisms to the attacker.
             });
             const data = await res.json();
             alert(data.message);
+        }
+
+
+        let detectedClientIp = '';
+
+        async function fetchSafeList() {
+            try {
+                const res = await fetch('/api/safelist');
+                if (!res.ok) return;
+                const data = await res.json();
+                detectedClientIp = data.client_ip || '';
+                const el = document.getElementById('detected-client-ip');
+                if (el) el.innerText = detectedClientIp + (data.is_client_safe ? ' (SAFE)' : ' (Not on safe list)');
+
+                const container = document.getElementById('safelist-items');
+                if (!container) return;
+                if (!data.safe_ips || !data.safe_ips.length) {
+                    container.innerHTML = '<div class="text-slate-500 text-center py-3">No custom safe-listed IPs. Localhost is protected by default.</div>';
+                    return;
+                }
+                container.innerHTML = data.safe_ips.map(item => `
+                    <div class="flex items-center justify-between py-2 px-1 hover:bg-white/[0.02] rounded">
+                        <div>
+                            <span class="text-emerald-400 font-bold font-mono">${escapeHtml(item.ip)}</span>
+                            <span class="text-slate-400 text-[11px] font-sans ml-2">${escapeHtml(item.label)}</span>
+                        </div>
+                        <button onclick="removeSafeIp('${sanitizeJsArg(item.ip)}')" class="text-rose-400 hover:text-rose-300 text-xs px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition">
+                            Remove
+                        </button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error("Safe list fetch error:", e);
+            }
+        }
+
+        async function addCurrentIpToSafeList() {
+            if (!detectedClientIp) return;
+            await addIpToSafeList(detectedClientIp, 'My Current Workstation');
+        }
+
+        async function addNewSafeIp() {
+            const input = document.getElementById('new-safe-ip');
+            const ip = input ? input.value.trim() : '';
+            if (!ip) {
+                alert('Please enter an IP address');
+                return;
+            }
+            await addIpToSafeList(ip, 'Manual Safe List Entry');
+            if (input) input.value = '';
+        }
+
+        async function addIpToSafeList(ip, label) {
+            try {
+                const res = await fetch('/api/safelist/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip: ip, label: label })
+                });
+                const data = await res.json();
+                alert(data.message);
+                fetchSafeList();
+            } catch (e) {
+                alert('Failed to add IP to safe list: ' + e.message);
+            }
+        }
+
+        async function removeSafeIp(ip) {
+            if (!confirm(`Remove ${ip} from the Operator Safe List?`)) return;
+            try {
+                const res = await fetch('/api/safelist/remove', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip: ip })
+                });
+                const data = await res.json();
+                fetchSafeList();
+            } catch (e) {
+                alert('Error removing IP: ' + e.message);
+            }
         }
 
         async function submitNewToken() {
@@ -871,6 +1027,7 @@ interfaces without revealing surveillance mechanisms to the attacker.
             const el = document.getElementById(id);
             if (el) {
                 if (id === 'token-modal') resetModalToForm();
+                if (id === 'safelist-modal') fetchSafeList();
                 el.style.display = 'flex';
             }
         }

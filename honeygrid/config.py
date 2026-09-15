@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -35,5 +36,7 @@ class Settings:
     HONEYGRID_SECRET_KEY: str = os.getenv("HONEYGRID_SECRET_KEY", "hg-sentinel-master-secret-key-392810").strip()
     SESSION_COOKIE_NAME: str = "honeygrid_session"
     SESSION_EXPIRE_HOURS: int = _get_int("SESSION_EXPIRE_HOURS", 168)  # 7 days
+    DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL", "").strip() or None
+    OPERATOR_SAFE_IPS: str = os.getenv("OPERATOR_SAFE_IPS", "").strip()
 
 settings = Settings()
