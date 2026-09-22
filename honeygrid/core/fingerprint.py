@@ -1,6 +1,6 @@
 import ipaddress
 import re
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, Any, List
 from fastapi import Request
 
 # Common attack / recon tools and browsers signatures

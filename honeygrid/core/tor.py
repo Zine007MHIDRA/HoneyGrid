@@ -27,6 +27,16 @@ FALLBACK_TOR_SEEDS: Set[str] = {
     "199.249.230.70"
 }
 
+def _get_default_tor_cache_path() -> Path:
+    if (
+        os.environ.get("VERCEL")
+        or os.environ.get("VERCEL_ENV")
+        or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+        or os.environ.get("LAMBDA_TASK_ROOT")
+    ):
+        return Path("/tmp/.tor_exit_cache.txt")
+    return BASE_DIR / ".tor_exit_cache.txt"
+
 class TorDetector:
     """
     High-performance Tor Exit-Node detection engine.
@@ -41,21 +51,21 @@ class TorDetector:
         self._exit_nodes: Set[str] = set()
         self._test_nodes: Set[str] = set()
         self._last_refresh: float = 0.0
-        self._cache_file = cache_file or (BASE_DIR / ".tor_exit_cache.txt")
+        self._cache_file = cache_file or _get_default_tor_cache_path()
         self._load_disk_cache_or_seeds()
 
     def _load_disk_cache_or_seeds(self):
         """Loads cached exit nodes from disk if available, otherwise initializes fallback seeds."""
-        if self._cache_file.exists():
-            try:
+        try:
+            if self._cache_file.exists():
                 with open(self._cache_file, "r", encoding="utf-8") as f:
                     ips = {line.strip() for line in f if line.strip() and not line.startswith("#")}
                 if len(ips) >= 10:
                     self._exit_nodes = ips
                     self._last_refresh = self._cache_file.stat().st_mtime
                     return
-            except Exception:
-                pass
+        except Exception:
+            pass
         
         self._exit_nodes = set(FALLBACK_TOR_SEEDS)
 

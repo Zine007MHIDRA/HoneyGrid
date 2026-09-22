@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -43,12 +43,12 @@ class Settings:
     ENABLE_CLOUDFLARE_DEFAULT_CIDRS: bool = os.getenv("ENABLE_CLOUDFLARE_DEFAULT_CIDRS", "true").strip().lower() in ("true", "1", "yes")
     GEOIP_API_URL: str = os.getenv("GEOIP_API_URL", "https://freeipapi.com/api/json/{ip}").strip()
 
-    def get_trusted_proxies(self) -> list[str]:
+    def get_trusted_proxies(self) -> List[str]:
         if not self.TRUSTED_PROXIES:
             return []
         return [x.strip() for x in self.TRUSTED_PROXIES.split(",") if x.strip()]
 
-    def get_cloudflare_proxies(self) -> list[str]:
+    def get_cloudflare_proxies(self) -> List[str]:
         explicit = [x.strip() for x in self.CLOUDFLARE_PROXIES.split(",") if x.strip()]
         if explicit:
             return explicit
