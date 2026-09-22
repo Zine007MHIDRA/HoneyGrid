@@ -1,4 +1,5 @@
 import os
+import time
 import sqlite3
 import json
 from typing import List, Optional, Dict, Any, Tuple
@@ -127,6 +128,38 @@ def init_db():
         added_by TEXT NOT NULL
     )
     """)
+
+    # Tables for Persistent Rate Limiting
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS login_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT NOT NULL,
+        attempt_time REAL NOT NULL
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_time ON login_attempts(ip, attempt_time)")
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS login_lockouts (
+        ip TEXT PRIMARY KEY,
+        locked_until REAL NOT NULL
+    )
+    """)
+
+    # Table for Structured Security Audit Logs
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        client_ip TEXT NOT NULL,
+        action TEXT NOT NULL,
+        target TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        metadata TEXT
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)")
     
     # Migration helper for tokens: ensure owner_id and owner_email exist
     cursor.execute("PRAGMA table_info(tokens)")
@@ -309,6 +342,124 @@ def is_safe_ip(ip: str) -> bool:
     row = cursor.fetchone()
     conn.close()
     return row is not None
+
+
+# -------------------------------------------------------------
+# Persistent Rate Limiting Helpers
+# -------------------------------------------------------------
+
+def db_is_locked(ip: str, window_seconds: int = 600, max_attempts: int = 5, lockout_seconds: int = 600) -> Tuple[bool, int]:
+    clean_ip = ip.strip()
+    if not clean_ip:
+        return False, 0
+    now = time.time()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 1. Check active lockout
+    cursor.execute("SELECT locked_until FROM login_lockouts WHERE ip = ?", (clean_ip,))
+    row = cursor.fetchone()
+    if row:
+        locked_until = row[0]
+        if now < locked_until:
+            conn.close()
+            return True, max(1, int(locked_until - now))
+        else:
+            cursor.execute("DELETE FROM login_lockouts WHERE ip = ?", (clean_ip,))
+            conn.commit()
+
+    # 2. Prune old attempts
+    cutoff = now - window_seconds
+    cursor.execute("DELETE FROM login_attempts WHERE attempt_time < ?", (cutoff,))
+    
+    # 3. Check attempt count
+    cursor.execute("SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND attempt_time >= ?", (clean_ip, cutoff))
+    count = cursor.fetchone()[0]
+    if count >= max_attempts:
+        locked_until = now + lockout_seconds
+        cursor.execute("INSERT OR REPLACE INTO login_lockouts (ip, locked_until) VALUES (?, ?)", (clean_ip, locked_until))
+        cursor.execute("DELETE FROM login_attempts WHERE ip = ?", (clean_ip,))
+        conn.commit()
+        conn.close()
+        return True, lockout_seconds
+
+    conn.commit()
+    conn.close()
+    return False, 0
+
+def db_record_failure(ip: str, window_seconds: int = 600, max_attempts: int = 5, lockout_seconds: int = 600) -> int:
+    clean_ip = ip.strip()
+    if not clean_ip:
+        return 0
+    now = time.time()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("INSERT INTO login_attempts (ip, attempt_time) VALUES (?, ?)", (clean_ip, now))
+    cutoff = now - window_seconds
+    cursor.execute("DELETE FROM login_attempts WHERE attempt_time < ?", (cutoff,))
+    cursor.execute("SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND attempt_time >= ?", (clean_ip, cutoff))
+    count = cursor.fetchone()[0]
+
+    if count >= max_attempts:
+        locked_until = now + lockout_seconds
+        cursor.execute("INSERT OR REPLACE INTO login_lockouts (ip, locked_until) VALUES (?, ?)", (clean_ip, locked_until))
+        cursor.execute("DELETE FROM login_attempts WHERE ip = ?", (clean_ip,))
+        conn.commit()
+        conn.close()
+        return max_attempts
+
+    conn.commit()
+    conn.close()
+    return count
+
+def db_record_success(ip: str):
+    clean_ip = ip.strip()
+    if not clean_ip:
+        return
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM login_attempts WHERE ip = ?", (clean_ip,))
+    cursor.execute("DELETE FROM login_lockouts WHERE ip = ?", (clean_ip,))
+    conn.commit()
+    conn.close()
+
+# -------------------------------------------------------------
+# Structured Security Audit Logging Helpers
+# -------------------------------------------------------------
+
+def record_audit_log(
+    action: str,
+    outcome: str,
+    actor: str = "system",
+    client_ip: str = "127.0.0.1",
+    target: str = "",
+    metadata: Optional[Dict[str, Any]] = None
+) -> int:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    meta_json = json.dumps(metadata or {})
+    cursor.execute("""
+        INSERT INTO audit_logs (timestamp, actor, client_ip, action, target, outcome, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (now_iso, actor, client_ip, action, target, outcome, meta_json))
+    log_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return log_id
+
+def list_audit_logs(limit: int = 50, action: Optional[str] = None) -> List[Dict[str, Any]]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if action:
+        cursor.execute("SELECT * FROM audit_logs WHERE action = ? ORDER BY id DESC LIMIT ?", (action, limit))
+    else:
+        cursor.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?", (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 
 # -------------------------------------------------------------
 # Honeytoken & Incident Operations

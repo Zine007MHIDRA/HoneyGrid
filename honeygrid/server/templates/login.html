@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HoneyGrid Sentinel &bull; Identity & Access Gateway</title>
+    <title>HoneyGrid Sentinel &bull; Tactical Access Gateway</title>
     
     <!-- Google Fonts: Geist & Geist Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,14 +22,13 @@
                         mono: ['"Geist Mono"', 'monospace']
                     },
                     colors: {
-                        obsidian: '#05070c',
-                        surfaceDark: '#0a0e17',
-                        surfaceCard: '#0f1422',
-                        surfaceBorder: '#1c2438',
-                        laserCrimson: '#f43f5e',
-                        laserRed: '#ef4444',
-                        cyberCyan: '#06b6d4',
-                        matrixEmerald: '#10b981'
+                        carbon: '#07090e',
+                        surfaceCard: '#0d111a',
+                        surfaceElevated: '#131824',
+                        surfaceBorder: '#1c2436',
+                        hazardCrimson: '#ff2a55',
+                        defenseEmerald: '#10b981',
+                        tacticalAmber: '#f59e0b'
                     }
                 }
             }
@@ -41,71 +40,69 @@
             color-scheme: dark;
         }
         body {
-            background-color: #05070c;
+            background-color: #07090e;
             font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
             background-image: 
-                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(244, 63, 94, 0.12), transparent),
-                radial-gradient(circle at 100% 100%, rgba(6, 182, 212, 0.05), transparent),
-                linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-            background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+                radial-gradient(circle at 50% -20%, rgba(255, 42, 85, 0.08) 0%, transparent 50%),
+                linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+            background-size: 100% 100%, 32px 32px, 32px 32px;
         }
 
-        .bezel-card {
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 50%, rgba(244, 63, 94, 0.06) 100%);
+        /* Double-Bezel Hardware Architecture */
+        .hardware-shell {
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 1.25rem;
             padding: 1px;
-            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 40px -10px rgba(244, 63, 94, 0.12);
+            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.9), 0 0 30px -10px rgba(255, 42, 85, 0.08);
         }
 
-        .bezel-inner {
-            background: radial-gradient(circle at 50% 0%, #111728 0%, #090d16 100%);
+        .hardware-core {
+            background: #090d15;
+            border: 1px solid rgba(255, 255, 255, 0.04);
             border-radius: calc(1.25rem - 1px);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
         }
 
         .input-box {
-            background: rgba(10, 14, 23, 0.7);
-            border: 1px solid #1c2438;
-            color: #f8fafc;
-            transition: all 0.2s ease;
+            background: #06080d;
+            border: 1px solid #1c2436;
+            color: #f1f5f9;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .input-box:focus {
             outline: none;
-            border-color: #f43f5e;
-            box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.18), inset 0 1px 2px rgba(0, 0, 0, 0.5);
-            background: rgba(15, 20, 34, 0.9);
+            border-color: #ff2a55;
+            box-shadow: 0 0 0 1px #ff2a55, inset 0 1px 2px rgba(0, 0, 0, 0.8);
+            background: #0a0e17;
         }
     </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between text-slate-200 antialiased selection:bg-rose-500/30 selection:text-rose-200">
 
-    <!-- Top Status Bar -->
-    <header class="w-full border-b border-white/[0.06] bg-obsidian/80 backdrop-blur-md px-6 py-4">
+    <!-- Top Status Header -->
+    <header class="w-full border-b border-white/[0.06] bg-[#07090e]/80 backdrop-blur-md px-6 py-3.5">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg p-[1.5px] bg-gradient-to-b from-rose-500/50 via-white/10 to-transparent">
-                    <div class="w-full h-full rounded-[6px] overflow-hidden bg-black flex items-center justify-center">
-                        <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover" onerror="this.src='/static/logo.jpg'" />
-                    </div>
+                <div class="w-8 h-8 rounded-lg p-[1px] bg-white/10 border border-white/10 shadow-md shadow-black">
+                    <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover rounded-[7px]" onerror="this.src='/static/logo.jpg'" />
                 </div>
                 <div>
-                    <span class="text-sm font-bold tracking-tight text-white font-sans flex items-center gap-2">
+                    <span class="text-xs font-bold tracking-wider text-white font-mono flex items-center gap-2">
                         HONEYGRID
-                        <span class="text-[9px] font-mono tracking-widest uppercase px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/25 font-semibold">
-                            SENTINEL SOC
+                        <span class="text-[9px] font-mono tracking-widest uppercase px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400 border border-white/[0.08]">
+                            SOC Access Gateway
                         </span>
                     </span>
                 </div>
             </div>
 
-            <div class="flex items-center gap-2 font-mono text-[11px] text-slate-400">
-                <span class="relative flex h-2 w-2">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-                </span>
-                <span class="text-slate-300 font-semibold">GATEWAY SECURED</span>
-                <span class="text-slate-600 hidden sm:inline">&bull;</span>
-                <span class="text-slate-500 hidden sm:inline">ZERO-TRUST PROTOCOL</span>
+            <div class="flex items-center gap-2.5 font-mono text-[11px] text-slate-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-slate-300 font-semibold tracking-wider">CONSOLE: ONLINE</span>
+                <span class="text-slate-700 hidden sm:inline">//</span>
+                <span class="text-slate-500 hidden sm:inline">ZERO-TRUST AUDIT</span>
             </div>
         </div>
     </header>
@@ -114,43 +111,45 @@
     <main class="flex-1 flex items-center justify-center p-4 sm:p-6 my-6">
         <div class="w-full max-w-md">
             
-            <div class="bezel-card">
-                <div class="bezel-inner p-6 sm:p-8">
+            <div class="hardware-shell">
+                <div class="hardware-core p-6 sm:p-8">
 
                     <!-- Logo and Title Area -->
                     <div class="text-center mb-6">
                         <div class="inline-flex relative mb-4">
-                            <div class="w-16 h-16 rounded-2xl p-[2px] bg-gradient-to-b from-rose-500/60 via-white/15 to-transparent shadow-xl shadow-black/80">
-                                <div class="w-full h-full rounded-[14px] overflow-hidden bg-black flex items-center justify-center border border-white/10">
+                            <div class="w-16 h-16 rounded-2xl p-[1px] bg-gradient-to-b from-white/20 via-white/5 to-transparent shadow-2xl shadow-black">
+                                <div class="w-full h-full rounded-[15px] overflow-hidden bg-black flex items-center justify-center border border-white/10">
                                     <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover" onerror="this.src='/static/logo.jpg'" />
                                 </div>
                             </div>
-                            <span class="absolute -bottom-1 -right-1 flex h-4 w-4">
-                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                <span class="relative inline-flex rounded-full h-4 w-4 bg-rose-500 border-2 border-[#090d16]"></span>
+                            <span class="absolute -bottom-1 -right-1 flex h-3 w-3">
+                                <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-[#090d15]"></span>
                             </span>
                         </div>
 
-                        <h2 class="text-xl font-bold text-white tracking-tight font-sans">
-                            SOC Access Gateway
+                        <div class="text-[10px] font-mono tracking-[0.2em] text-slate-500 uppercase mb-1">
+                            [ STATION // AUTH-GATEWAY ]
+                        </div>
+                        <h2 class="text-lg font-bold text-white tracking-tight font-sans">
+                            Operator Identity Verification
                         </h2>
                         <p class="text-xs text-slate-400 mt-1 font-sans">
-                            Sign in to inspect your deployed deception traps and live incidents
+                            Authenticate to inspect deployed canaries and intercept telemetry
                         </p>
                     </div>
 
                     <!-- Auth Mode Tabs -->
-                    <div class="flex rounded-xl bg-black/40 p-1 border border-white/[0.06] mb-6">
-                        <button id="tab-btn-login" onclick="switchAuthTab('login')" class="flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-md shadow-rose-950/40">
-                            Sign In
+                    <div class="flex rounded-lg bg-black/50 p-1 border border-white/[0.06] mb-6">
+                        <button id="tab-btn-login" onclick="switchAuthTab('login')" class="flex-1 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 bg-white/[0.08] text-white border border-white/[0.08] shadow-sm font-mono tracking-wider">
+                            [ 01 // SIGN IN ]
                         </button>
-                        <button id="tab-btn-register" onclick="switchAuthTab('register')" class="flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200">
-                            Create Account
+                        <button id="tab-btn-register" onclick="switchAuthTab('register')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all duration-200 text-slate-400 hover:text-slate-200 font-mono tracking-wider">
+                            [ 02 // INITIALIZE ]
                         </button>
                     </div>
 
                     <!-- Alert / Error Banner -->
-                    <div id="auth-alert" class="hidden mb-5 p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs flex items-start gap-2.5">
+                    <div id="auth-alert" class="hidden mb-5 p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs flex items-start gap-2.5">
                         <svg class="w-4 h-4 text-rose-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
@@ -159,12 +158,12 @@
 
                     <!-- Form -->
                     <form id="auth-form" onsubmit="handleAuthSubmit(event)" method="POST" class="space-y-4">
-                        <!-- Deception Bot Honeypot Trap (Automated crawlers fill this and get blocked) -->
+                        <!-- Honeypot trap -->
                         <input type="text" name="hp_decoy_field" id="hp-decoy-field" tabindex="-1" autocomplete="off" style="display:none !important; position:absolute; left:-9999px;" aria-hidden="true" />
 
                         <div>
                             <label class="block text-xs font-medium text-slate-300 mb-1.5 font-sans">
-                                Corporate or Personal Email
+                                Operator Email Address
                             </label>
                             <div class="relative">
                                 <input 
@@ -173,8 +172,8 @@
                                     type="email" 
                                     autocomplete="username"
                                     required 
-                                    placeholder="operator@company.com"
-                                    class="w-full input-box px-3.5 py-2.5 rounded-xl text-sm font-sans" 
+                                    placeholder="operator@sentinel.corp"
+                                    class="w-full input-box px-3.5 py-2.5 rounded-lg text-xs font-mono" 
                                 />
                             </div>
                         </div>
@@ -194,13 +193,13 @@
                                     autocomplete="current-password"
                                     required 
                                     placeholder="••••••••••••" 
-                                    class="w-full input-box px-3.5 py-2.5 rounded-xl text-sm font-mono pr-10" 
+                                    class="w-full input-box px-3.5 py-2.5 rounded-lg text-xs font-mono pr-10" 
                                 />
                                 <button 
                                     type="button" 
                                     onclick="togglePasswordVisibility()" 
                                     tabindex="-1"
-                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors">
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
                                     <svg id="eye-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -213,25 +212,25 @@
                         <div class="space-y-1.5 pt-1">
                             <div class="flex items-center justify-between">
                                 <label class="text-xs font-medium text-slate-300 font-sans flex items-center gap-1.5">
-                                    <svg class="w-3.5 h-3.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                     </svg>
                                     <span>Anti-Bot Verification</span>
                                 </label>
-                                <span class="text-[10px] text-slate-500 font-mono">HMAC Challenge</span>
+                                <span class="text-[10px] text-slate-500 font-mono tracking-wider">[ HMAC-SHA256 ]</span>
                             </div>
                             
                             <div class="flex items-center gap-2">
-                                <div id="captcha-svg-container" class="rounded-xl border border-white/10 bg-[#090d16] flex items-center justify-center flex-1 h-12 overflow-hidden shadow-inner cursor-pointer" onclick="loadCaptcha()" title="Click to refresh challenge">
+                                <div id="captcha-svg-container" class="rounded-lg border border-white/10 bg-[#06080d] flex items-center justify-center flex-1 h-12 overflow-hidden shadow-inner cursor-pointer" onclick="loadCaptcha()" title="Click to refresh challenge">
                                     <div class="text-slate-500 text-xs font-mono animate-pulse flex items-center gap-2">
                                         <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                                         </svg>
-                                        <span>Generating CAPTCHA...</span>
+                                        <span>Synthesizing challenge...</span>
                                     </div>
                                 </div>
-                                <button type="button" onclick="loadCaptcha()" title="Regenerate CAPTCHA" class="h-12 w-12 shrink-0 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] text-slate-300 hover:text-white flex items-center justify-center transition-all active:scale-95 group">
+                                <button type="button" onclick="loadCaptcha()" title="Regenerate Challenge" class="h-12 w-12 shrink-0 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] text-slate-300 hover:text-white flex items-center justify-center transition-all active:scale-95 group">
                                     <svg id="captcha-reload-icon" class="w-4 h-4 text-slate-400 group-hover:text-white group-hover:rotate-180 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                     </svg>
@@ -247,41 +246,45 @@
                                 autocomplete="off"
                                 autocorrect="off"
                                 spellcheck="false"
-                                placeholder="Type 5-character code above" 
-                                class="w-full input-box px-3.5 py-2 rounded-xl text-sm font-mono tracking-widest text-center uppercase placeholder:tracking-normal placeholder:font-sans placeholder:normal-case placeholder:text-slate-500" 
+                                placeholder="Enter 5-character challenge code" 
+                                class="w-full input-box px-3.5 py-2 rounded-lg text-xs font-mono tracking-[0.25em] text-center uppercase placeholder:tracking-normal placeholder:font-sans placeholder:normal-case placeholder:text-slate-500" 
                             />
                         </div>
 
                         <div class="flex items-center justify-between pt-1">
                             <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-400 hover:text-slate-300 transition-colors">
-                                <input type="checkbox" id="remember-me" checked class="w-4 h-4 rounded bg-black/50 border border-white/10 text-rose-600 focus:ring-0 focus:ring-offset-0 transition cursor-pointer" />
-                                <span class="font-sans">Remember this login</span>
+                                <input type="checkbox" id="remember-me" checked class="w-3.5 h-3.5 rounded bg-black/50 border border-white/10 text-rose-600 focus:ring-0 focus:ring-offset-0 transition cursor-pointer" />
+                                <span class="font-sans">Preserve 7-day session</span>
                             </label>
-                            <span class="text-[10px] text-slate-500 font-mono">7-Day Session</span>
+                            <span class="text-[10px] text-slate-500 font-mono">ENCRYPTED COOKIE</span>
                         </div>
 
                         <div id="register-terms" class="hidden text-[11px] text-slate-400 leading-relaxed font-sans pt-1">
-                            By creating an account, your user ID is provisioned with isolated canary assets, multi-tenant incident isolation, and encrypted threat telemetry.
+                            Provisioning an operator account creates an isolated workspace with tenant-scoped honeytoken assets and threat telemetry.
                         </div>
 
+                        <!-- Button-in-Button Nested CTA -->
                         <button 
                             id="submit-btn" 
                             type="submit" 
-                            class="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-semibold text-xs tracking-wider uppercase shadow-lg shadow-rose-950/60 transition-all duration-300 active:scale-[0.99] flex items-center justify-center gap-2">
-                            <span id="btn-text">Authenticate to Sentinel SOC</span>
-                            <svg id="btn-spinner" class="hidden animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                            </svg>
+                            class="w-full mt-2 pl-4 pr-2 py-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-white font-mono text-xs tracking-wider uppercase transition-all duration-300 active:scale-[0.99] flex items-center justify-between group">
+                            <span id="btn-text">AUTHENTICATE TO CONSOLE</span>
+                            <span class="w-7 h-7 rounded-md bg-white/10 flex items-center justify-center text-white group-hover:translate-x-0.5 transition-transform duration-200">
+                                <svg id="btn-spinner" class="hidden animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                <svg id="btn-arrow" class="w-3.5 h-3.5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
+                            </span>
                         </button>
                     </form>
 
                     <!-- Technical Specs footer in card -->
-                    <div class="mt-6 pt-5 border-t border-white/[0.06] flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                    <div class="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between text-[10px] text-slate-500 font-mono">
                         <div class="flex items-center gap-1.5">
-                            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                             <span>PBKDF2-HMAC-SHA256</span>
                         </div>
                         <div>200,000 ROUNDS</div>
@@ -292,21 +295,21 @@
 
             <!-- Bottom Information Pill -->
             <div class="mt-6 text-center space-y-1 text-slate-500 text-[11px] font-sans">
-                <p>Canary tripwires deployed at <code class="text-slate-400">/t/{id}</code> remain public to catch unauthorized actors.</p>
-                <p>SOC telemetry and incident investigation require operator authentication.</p>
+                <p>Public canary callbacks at <code class="text-slate-400 font-mono">/t/{id}</code> trip without authentication.</p>
+                <p>SOC telemetry and incident triage require verified operator credentials.</p>
             </div>
 
         </div>
     </main>
 
     <!-- Footer -->
-    <footer class="w-full border-t border-white/[0.06] bg-obsidian/90 px-6 py-4 text-center text-xs text-slate-500 font-mono">
+    <footer class="w-full border-t border-white/[0.06] bg-[#07090e]/90 px-6 py-4 text-center text-xs text-slate-500 font-mono">
         HoneyGrid Sentinel Deception Matrix &bull; Enterprise Threat Hunting
     </footer>
 
     <!-- Logic Script -->
     <script>
-        let currentAuthMode = 'login'; // 'login' or 'register'
+        let currentAuthMode = 'login';
         let currentCaptchaToken = '';
 
         async function loadCaptcha() {
@@ -346,15 +349,15 @@
             const pwdInput = document.getElementById('auth-password');
 
             if (mode === 'login') {
-                btnLogin.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-md shadow-rose-950/40";
-                btnRegister.className = "flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200";
-                btnText.innerText = "Authenticate to Sentinel SOC";
+                btnLogin.className = "flex-1 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 bg-white/[0.08] text-white border border-white/[0.08] shadow-sm font-mono tracking-wider";
+                btnRegister.className = "flex-1 py-1.5 text-xs font-medium rounded-md transition-all duration-200 text-slate-400 hover:text-slate-200 font-mono tracking-wider";
+                btnText.innerText = "AUTHENTICATE TO CONSOLE";
                 regTerms.classList.add('hidden');
                 if (pwdInput) pwdInput.autocomplete = "current-password";
             } else {
-                btnRegister.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-md shadow-rose-950/40";
-                btnLogin.className = "flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200";
-                btnText.innerText = "Initialize Operator Account";
+                btnRegister.className = "flex-1 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 bg-white/[0.08] text-white border border-white/[0.08] shadow-sm font-mono tracking-wider";
+                btnLogin.className = "flex-1 py-1.5 text-xs font-medium rounded-md transition-all duration-200 text-slate-400 hover:text-slate-200 font-mono tracking-wider";
+                btnText.innerText = "INITIALIZE OPERATOR ACCOUNT";
                 regTerms.classList.remove('hidden');
                 if (pwdInput) pwdInput.autocomplete = "new-password";
             }
@@ -408,10 +411,12 @@
 
             const submitBtn = document.getElementById('submit-btn');
             const btnSpinner = document.getElementById('btn-spinner');
+            const btnArrow = document.getElementById('btn-arrow');
             const btnText = document.getElementById('btn-text');
 
             submitBtn.disabled = true;
             btnSpinner.classList.remove('hidden');
+            btnArrow.classList.add('hidden');
 
             const endpoint = currentAuthMode === 'login' ? '/api/auth/login' : '/api/auth/register';
 
@@ -432,24 +437,24 @@
                 const data = await res.json();
 
                 if (res.ok && data.status === 'success') {
-                    btnText.innerText = 'Access Granted. Redirecting...';
+                    btnText.innerText = 'ACCESS GRANTED. REDIRECTING...';
                     window.location.href = data.redirect || '/dashboard';
                 } else {
                     showAlert(data.message || data.detail || 'Authentication failed. Please check credentials and verification code.');
                     submitBtn.disabled = false;
                     btnSpinner.classList.add('hidden');
-                    // Automatically refresh CAPTCHA challenge after failure
+                    btnArrow.classList.remove('hidden');
                     loadCaptcha();
                 }
             } catch (err) {
                 showAlert('Network or gateway error: ' + err.message);
                 submitBtn.disabled = false;
                 btnSpinner.classList.add('hidden');
+                btnArrow.classList.remove('hidden');
                 loadCaptcha();
             }
         }
 
-        // On page load, verify session and load anti-bot challenge
         window.onload = async () => {
             try {
                 const res = await fetch('/api/auth/me');
@@ -462,7 +467,6 @@
                 }
             } catch (e) {}
             
-            // Load initial CAPTCHA challenge
             loadCaptcha();
         };
     </script>

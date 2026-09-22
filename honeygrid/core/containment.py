@@ -22,6 +22,15 @@ def block_ip(ip_address: str, dry_run: bool = False) -> Dict[str, Any]:
         "applied": False,
         "message": ""
     }
+
+    # Defense-in-depth: Never isolate a safe-listed operator IP under any circumstances
+    try:
+        from honeygrid.database import is_safe_ip
+        if is_safe_ip(ip_address):
+            result["message"] = f"Containment refused: IP {ip_address} is protected by Operator Safe List."
+            return result
+    except Exception:
+        pass
     
     if dry_run or sys.platform != "win32":
         result["message"] = f"Dry-run / Non-Windows simulation: Rule '{rule_name}' generated successfully."

@@ -10,75 +10,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- Tailwind CSS CDN with Custom Theme Tokens -->
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Modal: Operator Safe List (Allowlist) -->
-    <div id="safelist-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" style="display: none;">
-        <div class="bezel-card w-full max-w-lg">
-            <div class="bezel-inner p-6 space-y-4">
-                <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
-                    <div class="flex items-center gap-2.5">
-                        <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-sm font-bold text-white font-sans">Operator Safe List</h3>
-                            <p class="text-[11px] text-slate-400 font-sans">Suppresses false alarms and prevents accidental SOAR isolation of your IP</p>
-                        </div>
-                    </div>
-                    <button onclick="closeModal('safelist-modal')" class="text-slate-400 hover:text-white p-1">
-                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                </div>
-
-                <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between text-xs">
-                    <div>
-                        <span class="text-slate-400 font-sans">Your Current Network IP:</span>
-                        <span id="detected-client-ip" class="font-mono text-emerald-400 font-bold ml-1.5">Detecting...</span>
-                    </div>
-                    <button onclick="addCurrentIpToSafeList()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-md transition active:scale-95">
-                        + Safe-List My IP
-                    </button>
-                </div>
-
-                <div class="space-y-1.5">
-                    <label class="block text-xs font-medium text-slate-300 font-sans">Add IP Manually</label>
-                    <div class="flex gap-2">
-                        <input id="new-safe-ip" type="text" placeholder="e.g. 198.51.100.25 or 10.0.0.5" class="flex-1 input-box px-3.5 py-2 rounded-xl text-xs font-mono" />
-                        <button onclick="addNewSafeIp()" class="px-4 py-2 bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/10 rounded-xl text-xs font-medium transition">
-                            Add to Safe List
-                        </button>
-                    </div>
-                </div>
-
-                <div class="space-y-2">
-                    <label class="block text-xs font-medium text-slate-300 font-sans">Active Safe List Entries</label>
-                    <div id="safelist-items" class="max-h-48 overflow-y-auto space-y-1 divide-y divide-white/[0.04] text-xs font-mono p-1">
-                        <div class="text-slate-500 text-center py-4">Loading safe list...</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
-        function escapeHtml(str) {
-            if (str === null || str === undefined) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
-        }
-
-        function sanitizeJsArg(str) {
-            if (str === null || str === undefined) return '';
-            return String(str).replace(/[^a-zA-Z0-9\.\:\-_]/g, '');
-        }
-
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -88,14 +22,12 @@
                         mono: ['"Geist Mono"', 'monospace']
                     },
                     colors: {
-                        obsidian: '#05070c',
-                        surfaceDark: '#0a0e17',
-                        surfaceCard: '#0f1422',
-                        surfaceBorder: '#1c2438',
-                        laserCrimson: '#f43f5e',
-                        laserRed: '#ef4444',
-                        cyberCyan: '#06b6d4',
-                        matrixEmerald: '#10b981',
+                        carbon: '#07090e',
+                        surfaceCard: '#0d111a',
+                        surfaceElevated: '#131824',
+                        surfaceBorder: '#1c2436',
+                        hazardCrimson: '#ff2a55',
+                        defenseEmerald: '#10b981',
                         tacticalAmber: '#f59e0b'
                     }
                 }
@@ -112,162 +44,143 @@
             color-scheme: dark;
         }
         body {
-            background-color: #05070c;
+            background-color: #07090e;
             font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(255, 42, 85, 0.05) 0%, transparent 50%),
+                linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+            background-size: 100% 100%, 32px 32px, 32px 32px;
             overflow-x: hidden;
         }
 
-        /* Subtle Cyber Background Grid */
-        .cyber-grid {
-            background-image: 
-                radial-gradient(circle at 50% 0%, rgba(244, 63, 94, 0.07) 0%, transparent 60%),
-                linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-            background-size: 100% 100%, 48px 48px, 48px 48px;
+        /* Double-Bezel Hardware Architecture */
+        .hardware-shell {
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1rem;
+            padding: 1px;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8);
+            transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .hardware-shell:hover {
+            border-color: rgba(255, 255, 255, 0.14);
         }
 
-        /* Double-Bezel (Doppelrand) Architecture */
-        .bezel-card {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.07);
-            border-radius: 1.25rem;
-            padding: 0.375rem;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .bezel-card:hover {
-            border-color: rgba(255, 255, 255, 0.14);
-            box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.8), 0 0 16px -4px rgba(244, 63, 94, 0.1);
-        }
-        .bezel-inner {
-            background: linear-gradient(180deg, rgba(17, 24, 39, 0.75) 0%, rgba(10, 14, 23, 0.9) 100%);
+        .hardware-core {
+            background: #090d15;
             border: 1px solid rgba(255, 255, 255, 0.04);
-            border-radius: calc(1.25rem - 0.375rem);
+            border-radius: calc(1rem - 1px);
             box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
         }
 
         /* Tactical Pulse Marker for Leaflet */
         .radar-pulse-marker {
-            width: 16px;
-            height: 16px;
-            background: #f43f5e;
+            width: 14px;
+            height: 14px;
+            background: #ff2a55;
             border: 2px solid #ffffff;
             border-radius: 50%;
-            box-shadow: 0 0 16px #f43f5e;
+            box-shadow: 0 0 10px #ff2a55;
             animation: radar-pulse 2s infinite ease-out;
         }
         @keyframes radar-pulse {
-            0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.8); }
-            70% { transform: scale(1.1); box-shadow: 0 0 0 16px rgba(244, 63, 94, 0); }
-            100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+            0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 42, 85, 0.8); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 14px rgba(255, 42, 85, 0); }
+            100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 42, 85, 0); }
         }
 
-        /* Map styling */
         #attack-map {
-            height: 440px;
+            height: 420px;
             width: 100%;
-            border-radius: calc(1.25rem - 0.375rem);
+            border-radius: calc(1rem - 2px);
             position: relative;
             z-index: 1;
         }
         .leaflet-container {
-            background: #090d16 !important;
+            background: #06080d !important;
             z-index: 1 !important;
-            font-family: 'Geist', sans-serif !important;
+            font-family: 'Geist Mono', monospace !important;
         }
         .leaflet-pane { z-index: 2 !important; }
         .leaflet-top, .leaflet-bottom { z-index: 3 !important; }
         .leaflet-popup-content-wrapper {
-            background: rgba(10, 14, 23, 0.95) !important;
+            background: #090d15 !important;
             color: #f1f5f9 !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 0 15px rgba(244, 63, 94, 0.15) !important;
-            border-radius: 0.75rem !important;
-            backdrop-filter: blur(12px) !important;
+            box-shadow: 0 20px 30px rgba(0, 0, 0, 0.9) !important;
+            border-radius: 0.5rem !important;
             padding: 0 !important;
         }
         .leaflet-popup-tip {
-            background: #0a0e17 !important;
+            background: #090d15 !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
         }
         .leaflet-popup-content {
-            margin: 12px 14px !important;
+            margin: 10px 12px !important;
             font-size: 11px !important;
             line-height: 1.4 !important;
         }
 
-        #token-modal { z-index: 999999 !important; }
-
-        /* Custom Scrollbars */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #070a10; }
-        ::-webkit-scrollbar-thumb { background: #1f293d; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #07090e; }
+        ::-webkit-scrollbar-thumb { background: #1c2436; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2d374d; }
     </style>
 </head>
 
-<body class="cyber-grid text-slate-200 min-h-screen antialiased selection:bg-rose-500/30 selection:text-rose-200">
+<body class="text-slate-200 min-h-screen antialiased selection:bg-rose-500/30 selection:text-rose-200">
 
     <!-- Top Command Navigation Bar -->
-    <header class="sticky top-0 z-30 border-b border-white/[0.08] bg-[#05070c]/85 backdrop-blur-xl px-6 py-3.5 transition-all">
+    <header class="sticky top-0 z-30 border-b border-white/[0.08] bg-[#07090e]/90 backdrop-blur-xl px-6 py-3 transition-all">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
             <!-- Brand & Titanium Emblem -->
             <div class="flex items-center space-x-3.5">
-                <div class="relative group">
-                    <div class="w-10 h-10 rounded-xl p-[2px] bg-gradient-to-b from-rose-500/40 via-white/10 to-transparent shadow-lg shadow-black/60 group-hover:from-rose-500/70 transition-all duration-300">
-                        <div class="w-full h-full rounded-[10px] overflow-hidden bg-black/90 flex items-center justify-center border border-white/10">
-                            <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.src='/static/logo.jpg'" />
-                        </div>
-                    </div>
-                    <span class="absolute -bottom-1 -right-1 flex h-3 w-3">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-3 w-3 bg-rose-500 border-2 border-[#05070c]"></span>
-                    </span>
+                <div class="w-9 h-9 rounded-lg p-[1px] bg-white/10 border border-white/10 shadow-md shadow-black flex items-center justify-center">
+                    <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover rounded-[7px]" onerror="this.src='/static/logo.jpg'" />
                 </div>
                 <div>
                     <div class="flex items-center gap-2">
-                        <h1 class="text-base font-bold tracking-tight text-white flex items-center gap-2 font-sans">
+                        <h1 class="text-sm font-bold tracking-wider text-white flex items-center gap-2 font-mono">
                             HONEYGRID
-                            <span class="text-[10px] font-mono tracking-widest uppercase px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/25 font-semibold">
-                                SENTINEL MATRIX
+                            <span class="text-[9px] font-mono tracking-widest uppercase px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400 border border-white/[0.08]">
+                                SENTINEL SOC
                             </span>
                         </h1>
                     </div>
-                    <p class="text-[11px] text-slate-400 tracking-tight font-sans">
-                        Autonomous Cyber Deception, Threat Intelligence & Containment
+                    <p class="text-[10px] text-slate-500 tracking-wider font-mono uppercase">
+                        Active Cyber Deception &amp; Autonomous Threat Triage
                     </p>
                 </div>
             </div>
 
             <!-- Telemetry Status & Global Action Bar -->
-            <div class="flex items-center space-x-3">
-                <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/5 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
-                    <span class="relative flex h-2 w-2">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span>DEFENSE GRID: LIVE</span>
+            <div class="flex items-center space-x-2.5">
+                <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-md bg-emerald-500/[0.06] border border-emerald-500/20 text-emerald-400 text-xs font-mono">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="tracking-wider text-[11px]">GRID: ARMED // ACTIVE</span>
                 </div>
 
                 <!-- Safe List Allowlist Button -->
-                <button onclick="openModal('safelist-modal')" class="group inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] rounded-lg transition-all duration-200 active:scale-[0.98]" title="Manage Operator Safe List (Allowlist)">
+                <button onclick="openModal('safelist-modal')" class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] rounded-md transition-all active:scale-[0.98]" title="Manage Operator Safe List">
                     <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
-                    <span>Safe List</span>
+                    <span>SAFE LIST</span>
                 </button>
 
-                <button onclick="refreshData()" class="group inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] rounded-lg transition-all duration-200 active:scale-[0.98]">
-                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:rotate-180 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button onclick="refreshData()" class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] rounded-md transition-all active:scale-[0.98]">
+                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    <span>Sync Feed</span>
+                    <span>SYNC FEED</span>
                 </button>
 
                 <!-- Button-in-Button Trailing CTA -->
-                <button onclick="openModal('token-modal')" class="group inline-flex items-center gap-2.5 pl-3.5 pr-2 py-1.5 rounded-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-medium text-xs shadow-lg shadow-rose-950/50 transition-all duration-300 active:scale-[0.98]">
-                    <span>Deploy Deception Trap</span>
-                    <span class="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center group-hover:rotate-90 transition-transform duration-300">
-                        <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button onclick="openModal('token-modal')" class="inline-flex items-center justify-between pl-3 pr-1.5 py-1 rounded-md bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-white font-mono text-xs tracking-wider uppercase transition-all active:scale-[0.98] group">
+                    <span class="mr-2">DEPLOY TRAP</span>
+                    <span class="w-5 h-5 rounded bg-white/10 flex items-center justify-center text-white group-hover:translate-x-0.5 transition-transform">
+                        <svg class="w-3 h-3 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                         </svg>
                     </span>
@@ -275,13 +188,13 @@
 
                 <!-- User Profile & Sign Out Bar -->
                 <div class="flex items-center gap-2 pl-2 border-l border-white/10">
-                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs font-mono">
-                        <div class="w-2 h-2 rounded-full bg-rose-500"></div>
-                        <span id="user-email-display" class="text-slate-300 max-w-[170px] truncate" title="Active Operator">...</span>
-                        <span id="user-role-badge" class="hidden px-1.5 py-0.5 text-[9px] font-bold rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">ADMIN</span>
+                    <div class="flex items-center gap-2 px-2.5 py-1 rounded-md bg-white/[0.03] border border-white/[0.06] text-xs font-mono">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                        <span id="user-email-display" class="text-slate-300 max-w-[150px] truncate" title="Active Operator">...</span>
+                        <span id="user-role-badge" class="hidden px-1 py-0.2 text-[9px] font-bold rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">ADMIN</span>
                     </div>
-                    <button onclick="logoutUser()" title="Sign Out of Sentinel SOC" class="p-2 rounded-lg text-slate-400 hover:text-rose-400 bg-white/[0.03] hover:bg-rose-500/10 border border-white/[0.08] hover:border-rose-500/20 transition-all active:scale-[0.98]">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <button onclick="logoutUser()" title="Sign Out of Sentinel SOC" class="p-1.5 rounded-md text-slate-400 hover:text-rose-400 bg-white/[0.03] hover:bg-rose-500/10 border border-white/[0.06] hover:border-rose-500/20 transition-all active:scale-[0.98]">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                         </svg>
                     </button>
@@ -290,178 +203,155 @@
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+    <main class="max-w-7xl mx-auto px-6 py-6 space-y-5">
 
         <!-- Multi-Tenant Scope Banner -->
-        <div id="tenant-scope-banner" class="flex items-center justify-between px-4 py-2.5 rounded-xl border border-white/[0.06] bg-black/40 text-xs">
-            <div class="flex items-center gap-2 text-slate-300 font-sans">
-                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                <span id="tenant-scope-text">Isolated Operator Workspace: Displaying your private canaries & incident telemetry</span>
+        <div id="tenant-scope-banner" class="flex items-center justify-between px-3.5 py-2 rounded-lg border border-white/[0.06] bg-[#090d15] text-xs font-mono">
+            <div class="flex items-center gap-2 text-slate-400">
+                <span class="text-emerald-400">[ TENANT // ISOLATED ]</span>
+                <span id="tenant-scope-text" class="text-slate-300">Displaying private canaries &amp; incident telemetry</span>
             </div>
-            <div id="tenant-scope-admin-badge" class="hidden flex items-center gap-2 font-mono text-[10px] text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20">
-                <span>⚡ MASTER ADMIN OVERRIDE ACTIVE &bull; ALL FLEET TELEMETRY UNLOCKED</span>
+            <div id="tenant-scope-admin-badge" class="hidden flex items-center gap-2 font-mono text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                <span>[ ⚡ MASTER ADMIN OVERRIDE ACTIVE // ALL FLEET TELEMETRY UNLOCKED ]</span>
             </div>
         </div>
 
-        <!-- Command KPI Metrics: Double-Bezel Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Command KPI Metrics: High-Density Double-Bezel Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             <!-- Metric 1: Deception Arsenal -->
-            <div class="bezel-card">
-                <div class="bezel-inner p-5 flex flex-col justify-between h-full">
-                    <div class="flex items-center justify-between text-slate-400 mb-2">
-                        <span class="text-[11px] font-mono tracking-wider uppercase text-slate-400 font-semibold">Active Honeytokens</span>
-                        <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                            </svg>
-                        </div>
+            <div class="hardware-shell">
+                <div class="hardware-core p-4 flex flex-col justify-between h-full">
+                    <div class="flex items-center justify-between text-slate-400 mb-1">
+                        <span class="text-[10px] font-mono tracking-widest uppercase text-slate-500">[ SENSOR // 01 ]</span>
+                        <span class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">ARMED</span>
                     </div>
-                    <div id="stat-tokens" class="text-3xl font-extrabold text-white font-mono tracking-tight my-1">--</div>
-                    <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        <span>PDF, AWS, Git, .env Traps Deployed</span>
+                    <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">ACTIVE HONEYTOKENS</div>
+                    <div id="stat-tokens" class="text-2xl font-bold text-white font-mono tracking-tight my-1 tabular-nums">--</div>
+                    <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
+                        <span class="text-emerald-400">&bull;</span>
+                        <span>PDF &bull; AWS &bull; GIT &bull; ENV DEPLOYED</span>
                     </div>
                 </div>
             </div>
 
             <!-- Metric 2: Intercepted Incidents -->
-            <div class="bezel-card">
-                <div class="bezel-inner p-5 flex flex-col justify-between h-full">
-                    <div class="flex items-center justify-between text-slate-400 mb-2">
-                        <span class="text-[11px] font-mono tracking-wider uppercase text-slate-400 font-semibold">Security Interceptions</span>
-                        <div class="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                        </div>
+            <div class="hardware-shell">
+                <div class="hardware-core p-4 flex flex-col justify-between h-full">
+                    <div class="flex items-center justify-between text-slate-400 mb-1">
+                        <span class="text-[10px] font-mono tracking-widest uppercase text-slate-500">[ SENSOR // 02 ]</span>
+                        <span class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">ALERT</span>
                     </div>
-                    <div id="stat-incidents" class="text-3xl font-extrabold text-rose-500 font-mono tracking-tight my-1">--</div>
-                    <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse"></span>
-                        <span>Unauthorized trap triggers logged</span>
+                    <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">SECURITY INTERCEPTIONS</div>
+                    <div id="stat-incidents" class="text-2xl font-bold text-rose-400 font-mono tracking-tight my-1 tabular-nums">--</div>
+                    <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
+                        <span class="text-rose-400">&bull;</span>
+                        <span>UNAUTHORIZED TRAPS TRIPPED</span>
                     </div>
                 </div>
             </div>
 
             <!-- Metric 3: Critical Threat Actors -->
-            <div class="bezel-card">
-                <div class="bezel-inner p-5 flex flex-col justify-between h-full">
-                    <div class="flex items-center justify-between text-slate-400 mb-2">
-                        <span class="text-[11px] font-mono tracking-wider uppercase text-slate-400 font-semibold">High-Risk Adversaries</span>
-                        <div class="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                        </div>
+            <div class="hardware-shell">
+                <div class="hardware-core p-4 flex flex-col justify-between h-full">
+                    <div class="flex items-center justify-between text-slate-400 mb-1">
+                        <span class="text-[10px] font-mono tracking-widest uppercase text-slate-500">[ SENSOR // 03 ]</span>
+                        <span class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">THREAT</span>
                     </div>
-                    <div id="stat-high-threat" class="text-3xl font-extrabold text-amber-400 font-mono tracking-tight my-1">--</div>
-                    <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                        <span>VPN, Tor & Datacenter Scanners</span>
+                    <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">ADVERSARY THREAT INDEX</div>
+                    <div id="stat-high-threat" class="text-2xl font-bold text-amber-400 font-mono tracking-tight my-1 tabular-nums">--</div>
+                    <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
+                        <span class="text-amber-400">&bull;</span>
+                        <span>TOR &bull; VPN &bull; HOSTING SCANNERS</span>
                     </div>
                 </div>
             </div>
 
             <!-- Metric 4: Unmasked Attackers -->
-            <div class="bezel-card">
-                <div class="bezel-inner p-5 flex flex-col justify-between h-full">
-                    <div class="flex items-center justify-between text-slate-400 mb-2">
-                        <span class="text-[11px] font-mono tracking-wider uppercase text-slate-400 font-semibold">Unmasked Origins</span>
-                        <div class="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/25 flex items-center justify-center text-cyan-400">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                            </svg>
-                        </div>
+            <div class="hardware-shell">
+                <div class="hardware-core p-4 flex flex-col justify-between h-full">
+                    <div class="flex items-center justify-between text-slate-400 mb-1">
+                        <span class="text-[10px] font-mono tracking-widest uppercase text-slate-500">[ SENSOR // 04 ]</span>
+                        <span class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/[0.05] text-slate-300 border border-white/10">ORIGINS</span>
                     </div>
-                    <div id="stat-attackers" class="text-3xl font-extrabold text-cyan-400 font-mono tracking-tight my-1">--</div>
-                    <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                        <span>Unique IP vectors fingerprinted</span>
+                    <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">UNMASKED ADVERSARIES</div>
+                    <div id="stat-attackers" class="text-2xl font-bold text-slate-200 font-mono tracking-tight my-1 tabular-nums">--</div>
+                    <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
+                        <span class="text-slate-400">&bull;</span>
+                        <span>UNIQUE IP VECTORS FINGERPRINTED</span>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Cockpit HUD: Global Threat Radar & Attack Map -->
-        <div class="bezel-card">
-            <div class="bezel-inner p-5 space-y-3">
+        <div class="hardware-shell">
+            <div class="hardware-core p-4 space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] pb-3">
-                    <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-7 h-7 rounded bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 font-mono text-xs">
+                            ⌖
                         </div>
                         <div>
-                            <h2 class="text-sm font-bold text-white tracking-wide uppercase font-sans">
-                                Global Threat Telemetry & Attack Radar
+                            <h2 class="text-xs font-bold text-white tracking-wider uppercase font-mono">
+                                [ GLOBAL THREAT TELEMETRY &bull; ATTACK RADAR ]
                             </h2>
-                            <p class="text-[11px] text-slate-400">Real-time geospatial origins of adversaries tripping HoneyGrid traps</p>
+                            <p class="text-[10px] text-slate-500 font-mono">Real-time geospatial origins of adversaries tripping HoneyGrid traps</p>
                         </div>
                     </div>
 
                     <!-- HUD Coordinates & Sensor Status -->
                     <div class="flex items-center gap-2 text-xs font-mono">
-                        <div class="px-2.5 py-1 rounded bg-black/50 border border-white/[0.08] text-slate-400 flex items-center gap-2">
-                            <span class="text-rose-400">RADAR HUD</span>
+                        <div class="px-2.5 py-1 rounded bg-black/60 border border-white/[0.08] text-slate-400 flex items-center gap-2 text-[11px]">
+                            <span class="text-rose-400 font-bold">RADAR HUD</span>
                             <span id="map-coords-hud" class="text-slate-300">LAT: 20.00° / LON: 0.00°</span>
                         </div>
-                        <span class="px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">
-                            CARTO DarkMatter High-Precision
+                        <span class="px-2 py-0.5 rounded bg-white/[0.04] text-slate-400 border border-white/[0.08] text-[10px]">
+                            CARTO DarkMatter
                         </span>
                     </div>
                 </div>
 
                 <!-- Leaflet Container -->
-                <div class="relative overflow-hidden rounded-xl border border-white/[0.06]">
+                <div class="relative overflow-hidden rounded-lg border border-white/[0.06]">
                     <div id="attack-map"></div>
                 </div>
             </div>
         </div>
 
         <!-- Incident Feeds, Arsenal & Executive Briefing Tabs -->
-        <div class="space-y-4">
+        <div class="space-y-3">
             <!-- Modern Segmented Pill Switcher -->
-            <div class="flex p-1 bg-white/[0.03] border border-white/[0.06] rounded-xl w-max max-w-full overflow-x-auto">
-                <button onclick="switchTab('incidents')" id="tab-btn-incidents" class="px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-sm flex items-center gap-2">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
-                    <span>Incident Telemetry Feed</span>
+            <div class="flex p-1 bg-black/40 border border-white/[0.06] rounded-lg w-max max-w-full overflow-x-auto">
+                <button onclick="switchTab('incidents')" id="tab-btn-incidents" class="px-3.5 py-1.5 text-xs font-mono font-semibold rounded transition-all bg-white/[0.08] text-white border border-white/[0.08] shadow-sm flex items-center gap-2">
+                    <span>[ 01 // INCIDENT FEED ]</span>
                 </button>
-                <button onclick="switchTab('tokens')" id="tab-btn-tokens" class="px-4 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200 flex items-center gap-2">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                    <span>Active Honeytokens (<span id="token-count-badge" class="font-mono">0</span>)</span>
+                <button onclick="switchTab('tokens')" id="tab-btn-tokens" class="px-3.5 py-1.5 text-xs font-mono font-medium rounded transition-all text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                    <span>[ 02 // HONEYTOKENS (<span id="token-count-badge">0</span>) ]</span>
                 </button>
-                <button onclick="switchTab('report')" id="tab-btn-report" class="px-4 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200 flex items-center gap-2">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span>Executive IR Report</span>
+                <button onclick="switchTab('report')" id="tab-btn-report" class="px-3.5 py-1.5 text-xs font-mono font-medium rounded transition-all text-slate-400 hover:text-slate-200 flex items-center gap-2">
+                    <span>[ 03 // EXECUTIVE IR DOSSIER ]</span>
                 </button>
             </div>
 
             <!-- Tab 1: Incidents Feed Table -->
-            <div id="tab-incidents" class="bezel-card">
-                <div class="bezel-inner overflow-hidden">
+            <div id="tab-incidents" class="hardware-shell">
+                <div class="hardware-core overflow-hidden">
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-xs">
-                            <thead class="bg-black/40 text-slate-400 border-b border-white/[0.06] uppercase text-[10px] font-mono tracking-wider">
+                            <thead class="bg-black/50 text-slate-500 border-b border-white/[0.06] uppercase text-[10px] font-mono tracking-wider">
                                 <tr>
-                                    <th class="p-3.5 font-semibold">Timestamp</th>
-                                    <th class="p-3.5 font-semibold">Attacker Origin</th>
-                                    <th class="p-3.5 font-semibold">Threat Score</th>
-                                    <th class="p-3.5 font-semibold">Geolocation & ISP</th>
-                                    <th class="p-3.5 font-semibold">Hardware Fingerprint</th>
-                                    <th class="p-3.5 font-semibold">Tripped Token</th>
-                                    <th class="p-3.5 font-semibold text-right">SOAR Action</th>
+                                    <th class="p-3 font-semibold">Timestamp</th>
+                                    <th class="p-3 font-semibold">Attacker Origin</th>
+                                    <th class="p-3 font-semibold">Threat Score</th>
+                                    <th class="p-3 font-semibold">Geolocation &amp; ISP</th>
+                                    <th class="p-3 font-semibold">Hardware Fingerprint</th>
+                                    <th class="p-3 font-semibold">Tripped Token</th>
+                                    <th class="p-3 font-semibold text-right">SOAR Action</th>
                                 </tr>
                             </thead>
-                            <tbody id="incidents-table-body" class="divide-y divide-white/[0.04] font-mono">
+                            <tbody id="incidents-table-body" class="divide-y divide-white/[0.04] font-mono text-xs">
                                 <tr>
-                                    <td colspan="7" class="p-8 text-center text-slate-500 font-sans text-xs">
+                                    <td colspan="7" class="p-8 text-center text-slate-500 font-mono text-xs">
                                         Loading incident telemetry matrix...
                                     </td>
                                 </tr>
@@ -472,45 +362,42 @@
             </div>
 
             <!-- Tab 2: Deployed Honeytoken Arsenal -->
-            <div id="tab-tokens" class="hidden bezel-card">
-                <div class="bezel-inner overflow-hidden">
+            <div id="tab-tokens" class="hidden hardware-shell">
+                <div class="hardware-core overflow-hidden">
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-xs">
-                            <thead class="bg-black/40 text-slate-400 border-b border-white/[0.06] uppercase text-[10px] font-mono tracking-wider">
+                            <thead class="bg-black/50 text-slate-500 border-b border-white/[0.06] uppercase text-[10px] font-mono tracking-wider">
                                 <tr>
-                                    <th class="p-3.5 font-semibold">Token ID</th>
-                                    <th class="p-3.5 font-semibold">Type</th>
-                                    <th class="p-3.5 font-semibold">Label</th>
-                                    <th class="p-3.5 font-semibold">Triggered</th>
-                                    <th class="p-3.5 font-semibold">Created Date</th>
-                                    <th class="p-3.5 font-semibold">Canary URL / Target</th>
-                                    <th class="p-3.5 font-semibold text-right">Trap Deployment</th>
+                                    <th class="p-3 font-semibold">Token ID</th>
+                                    <th class="p-3 font-semibold">Type</th>
+                                    <th class="p-3 font-semibold">Label</th>
+                                    <th class="p-3 font-semibold">Triggered</th>
+                                    <th class="p-3 font-semibold">Created Date</th>
+                                    <th class="p-3 font-semibold">Canary URL / Target</th>
+                                    <th class="p-3 font-semibold text-right">Trap Deployment</th>
                                 </tr>
                             </thead>
-                            <tbody id="tokens-table-body" class="divide-y divide-white/[0.04] font-mono"></tbody>
+                            <tbody id="tokens-table-body" class="divide-y divide-white/[0.04] font-mono text-xs"></tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
             <!-- Tab 3: Executive IR Post-Mortem Report -->
-            <div id="tab-report" class="hidden bezel-card">
-                <div class="bezel-inner p-6 space-y-4">
-                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
+            <div id="tab-report" class="hidden hardware-shell">
+                <div class="hardware-core p-5 space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3">
                         <div>
-                            <h3 class="text-sm font-bold text-white flex items-center gap-2 font-sans">
-                                <span>📑</span> Incident Response Executive Post-Mortem
+                            <h3 class="text-xs font-bold text-white font-mono uppercase tracking-wider">
+                                [ INCIDENT RESPONSE EXECUTIVE DOSSIER ]
                             </h3>
-                            <p class="text-xs text-slate-400 font-sans">Automated breach summary, IOC inventory, and mitigation playbook</p>
+                            <p class="text-[11px] text-slate-400 font-mono">Automated breach summary, IOC inventory, and mitigation playbook</p>
                         </div>
-                        <button onclick="window.print()" class="px-3.5 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] text-xs text-white rounded-lg border border-white/[0.1] transition-all flex items-center gap-2">
-                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                            </svg>
-                            <span>Print / Export Document</span>
+                        <button onclick="window.print()" class="px-3 py-1 bg-white/[0.05] hover:bg-white/[0.1] text-xs text-white rounded border border-white/[0.1] transition-all font-mono">
+                            PRINT / EXPORT DOSSIER
                         </button>
                     </div>
-                    <div id="report-content" class="text-xs text-slate-300 font-mono space-y-4 bg-black/60 p-5 rounded-xl border border-white/[0.06] whitespace-pre-wrap leading-relaxed">
+                    <div id="report-content" class="text-xs text-slate-300 font-mono space-y-4 bg-black/60 p-4 rounded border border-white/[0.06] whitespace-pre-wrap leading-relaxed">
                         Loading executive briefing...
                     </div>
                 </div>
@@ -518,98 +405,143 @@
         </div>
     </main>
 
-    <!-- Deploy Token Modal with Double-Bezel and Placement View -->
-    <div id="token-modal" style="display: none; z-index: 999999;" class="fixed inset-0 bg-black/80 backdrop-blur-md items-center justify-center p-4">
-        <div class="bezel-card max-w-lg w-full shadow-2xl relative z-10">
-            <!-- View 1: Creation Form -->
-            <div id="modal-form-view" class="bezel-inner p-6 space-y-4">
-                <div class="flex justify-between items-center border-b border-white/[0.08] pb-3">
+    <!-- Modal: Operator Safe List (Properly placed inside body) -->
+    <div id="safelist-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" style="display: none;">
+        <div class="hardware-shell w-full max-w-lg">
+            <div class="hardware-core p-5 space-y-4">
+                <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
                     <div class="flex items-center gap-2.5">
-                        <div class="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                            </svg>
+                        <div class="w-7 h-7 rounded bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 font-mono text-xs">
+                            ✓
                         </div>
                         <div>
-                            <h3 class="text-sm font-bold text-white font-sans">Synthesize Deception Asset</h3>
+                            <h3 class="text-xs font-bold text-white font-mono tracking-wider uppercase">[ OPERATOR SAFE LIST ]</h3>
+                            <p class="text-[11px] text-slate-400 font-sans">Suppresses false alarms and prevents accidental SOAR isolation of your IP</p>
+                        </div>
+                    </div>
+                    <button onclick="closeModal('safelist-modal')" class="text-slate-400 hover:text-white p-1 text-sm font-mono">&times;</button>
+                </div>
+
+                <div class="p-3 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/20 flex items-center justify-between text-xs">
+                    <div>
+                        <span class="text-slate-400 font-mono text-[11px]">YOUR CURRENT IP:</span>
+                        <span id="detected-client-ip" class="font-mono text-emerald-400 font-bold ml-1.5">Detecting...</span>
+                    </div>
+                    <button onclick="addCurrentIpToSafeList()" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-mono font-medium transition active:scale-95">
+                        + SAFE-LIST MY IP
+                    </button>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="block text-xs font-medium text-slate-300 font-mono uppercase tracking-wider">Add IP Manually</label>
+                    <div class="flex gap-2">
+                        <input id="new-safe-ip" type="text" placeholder="e.g. 198.51.100.25 or 10.0.0.5" class="flex-1 bg-black/60 border border-white/[0.1] rounded p-2 text-xs font-mono text-white focus:border-rose-500 focus:outline-none" />
+                        <button onclick="addNewSafeIp()" class="px-3.5 py-1.5 bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/10 rounded text-xs font-mono transition">
+                            ADD ENTRY
+                        </button>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-xs font-medium text-slate-300 font-mono uppercase tracking-wider">Active Safe List Entries</label>
+                    <div id="safelist-items" class="max-h-48 overflow-y-auto space-y-1 divide-y divide-white/[0.04] text-xs font-mono p-1">
+                        <div class="text-slate-500 text-center py-4">Loading safe list...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deploy Token Modal -->
+    <div id="token-modal" style="display: none; z-index: 999999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
+        <div class="hardware-shell max-w-lg w-full shadow-2xl relative z-10">
+            <!-- View 1: Creation Form -->
+            <div id="modal-form-view" class="hardware-core p-6 space-y-4">
+                <div class="flex justify-between items-center border-b border-white/[0.08] pb-3">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-7 h-7 rounded bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400 font-mono text-xs">
+                            +
+                        </div>
+                        <div>
+                            <h3 class="text-xs font-bold text-white font-mono uppercase tracking-wider">[ SYNTHESIZE DECEPTION ASSET ]</h3>
                             <p class="text-[11px] text-slate-400 font-sans">Deploy canary tripwires directly to local, cloud, or server storage</p>
                         </div>
                     </div>
-                    <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white p-1">&times;</button>
+                    <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white p-1 text-sm font-mono">&times;</button>
                 </div>
 
                 <div class="space-y-3.5 text-xs font-sans">
                     <div>
-                        <label class="block text-slate-400 mb-1.5 font-medium">Deception Trap Vector</label>
-                        <select id="modal-type" class="w-full bg-black/60 border border-white/[0.1] rounded-lg p-2.5 text-slate-200 focus:border-rose-500 focus:outline-none transition">
-                            <option value="pdf">📄 Canary PDF Document (Executive Payroll / Confidential HR)</option>
-                            <option value="env">⚙️ Decoy .env Secrets File (Production Database & API Keys)</option>
-                            <option value="aws">☁️ AWS IAM Credentials File (~/.aws/credentials)</option>
-                            <option value="git">📦 Decoy Git Repository (.git/config Remote Trap)</option>
-                            <option value="keepass">🔐 Decoy KeePass Vault (passwords.kdbx)</option>
-                            <option value="web">🌐 Web / API Canary Tracking URL</option>
+                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Deception Trap Vector</label>
+                        <select id="modal-type" class="w-full bg-[#06080d] border border-white/[0.1] rounded p-2 text-slate-200 font-mono text-xs focus:border-rose-500 focus:outline-none transition">
+                            <option value="pdf">[ VEC // PDF ] Confidential Executive Payroll Document</option>
+                            <option value="env">[ CFG // ENV ] Production Database &amp; API Key Decoy (.env)</option>
+                            <option value="aws">[ IAM // AWS ] Cloud Credentials Trap (~/.aws/credentials)</option>
+                            <option value="git">[ REP // GIT ] Decoy Git Repository (.git/config Remote Trap)</option>
+                            <option value="keepass">[ VLT // KDBX ] Decoy Password Vault (passwords.kdbx)</option>
+                            <option value="web">[ WEB // URL ] Web Tracking Beacon / API URL</option>
                         </select>
                     </div>
 
                     <div>
-                        <label class="block text-slate-400 mb-1.5 font-medium">Decoy Filename / Label</label>
-                        <input id="modal-label" type="text" placeholder="e.g. Q4_Compensation_Review_2026" class="w-full bg-black/60 border border-white/[0.1] rounded-lg p-2.5 text-white font-mono focus:border-rose-500 focus:outline-none transition" />
+                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Decoy Filename / Label</label>
+                        <input id="modal-label" type="text" placeholder="e.g. Q4_Compensation_Review_2026" class="w-full bg-[#06080d] border border-white/[0.1] rounded p-2 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition" />
                     </div>
 
                     <div>
-                        <label class="block text-slate-400 mb-1.5 font-medium">Placement Notes (Where will you store it?)</label>
-                        <input id="modal-desc" type="text" placeholder="e.g. Planted in Finance Google Drive & Backup SMB Share" class="w-full bg-black/60 border border-white/[0.1] rounded-lg p-2.5 text-white focus:border-rose-500 focus:outline-none transition" />
+                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Placement Notes</label>
+                        <input id="modal-desc" type="text" placeholder="e.g. Planted in Finance Google Drive &amp; SMB Share" class="w-full bg-[#06080d] border border-white/[0.1] rounded p-2 text-white font-sans text-xs focus:border-rose-500 focus:outline-none transition" />
                     </div>
                 </div>
 
-                <div class="flex justify-end space-x-2.5 pt-3 border-t border-white/[0.08]">
-                    <button onclick="closeModal('token-modal')" class="px-4 py-2 text-xs text-slate-400 hover:text-white rounded-lg transition font-sans">Cancel</button>
-                    <button id="modal-submit-btn" onclick="submitNewToken()" class="px-5 py-2 text-xs bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-semibold transition shadow-lg shadow-rose-950/50 active:scale-[0.98] font-sans">
-                        Generate Trap File
+                <div class="flex justify-end space-x-2 pt-3 border-t border-white/[0.08]">
+                    <button onclick="closeModal('token-modal')" class="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white rounded transition font-mono">CANCEL</button>
+                    <button id="modal-submit-btn" onclick="submitNewToken()" class="px-4 py-1.5 text-xs bg-white/[0.08] hover:bg-white/[0.14] text-white border border-white/15 rounded font-mono font-medium transition active:scale-[0.98]">
+                        GENERATE TRAP FILE
                     </button>
                 </div>
             </div>
 
             <!-- View 2: Download & Placement View -->
-            <div id="modal-success-view" class="hidden bezel-inner p-6 space-y-4">
+            <div id="modal-success-view" class="hidden hardware-core p-6 space-y-4">
                 <div class="flex justify-between items-center border-b border-white/[0.08] pb-3">
                     <div class="flex items-center gap-2.5">
-                        <span class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xs">✓</span>
+                        <span class="w-7 h-7 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xs font-mono">✓</span>
                         <div>
-                            <h3 class="text-sm font-bold text-white font-sans">Deception Trap Armed & Ready</h3>
+                            <h3 class="text-xs font-bold text-white font-mono tracking-wider uppercase">[ DECEPTION TRAP ARMED ]</h3>
                             <p class="text-[11px] text-slate-400 font-sans">Download file and plant into target storage</p>
                         </div>
                     </div>
-                    <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white p-1">&times;</button>
+                    <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white p-1 text-sm font-mono">&times;</button>
                 </div>
 
-                <div class="bg-emerald-950/30 border border-emerald-500/30 rounded-lg p-3 text-xs text-emerald-300 font-sans">
-                    The honeytoken was successfully generated. Download the trap file below and save it to your storage to catch intruders.
+                <div class="bg-emerald-950/20 border border-emerald-500/20 rounded p-3 text-xs text-emerald-300 font-mono">
+                    The honeytoken was successfully generated. Download the trap file below and plant it in your storage to catch intruders.
                 </div>
 
-                <div class="space-y-3.5 text-xs font-sans">
+                <div class="space-y-3.5 text-xs">
                     <div>
-                        <label class="block text-slate-400 mb-1.5 font-medium">Download Trap to Save in Storage:</label>
-                        <a id="modal-download-link" href="#" download class="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg flex items-center justify-center gap-2 transition shadow-lg shadow-rose-950/50 text-xs">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Download Trap File:</label>
+                        <a id="modal-download-link" href="#" download class="w-full py-2 px-4 bg-white/[0.08] hover:bg-white/[0.14] text-white font-mono rounded border border-white/15 flex items-center justify-center gap-2 transition text-xs">
+                            <svg class="w-3.5 h-3.5 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                             </svg>
-                            <span>Download Decoy File</span>
+                            <span>DOWNLOAD DECOY PAYLOAD</span>
                         </a>
                     </div>
 
                     <div>
-                        <label class="block text-slate-400 mb-1.5 font-medium">Canary Callback Endpoint:</label>
+                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Canary Callback Endpoint:</label>
                         <div class="flex items-center gap-2">
-                            <input id="modal-canary-url-display" type="text" readonly class="w-full bg-black/60 border border-white/[0.1] rounded-lg p-2 text-slate-300 font-mono text-[11px]" />
-                            <button onclick="copyToClipboard(document.getElementById('modal-canary-url-display').value)" class="px-3 py-2 bg-white/[0.05] hover:bg-white/[0.1] text-white rounded-lg border border-white/[0.1] text-xs whitespace-nowrap transition">
-                                📋 Copy
+                            <input id="modal-canary-url-display" type="text" readonly class="w-full bg-[#06080d] border border-white/[0.1] rounded p-2 text-slate-300 font-mono text-[11px]" />
+                            <button onclick="copyToClipboard(document.getElementById('modal-canary-url-display').value)" class="px-3 py-2 bg-white/[0.05] hover:bg-white/[0.1] text-white rounded border border-white/[0.1] text-xs font-mono whitespace-nowrap transition">
+                                COPY
                             </button>
                         </div>
                     </div>
 
-                    <div class="bg-black/40 border border-white/[0.08] rounded-lg p-3 text-[11px] space-y-1">
-                        <div class="font-bold text-amber-400 uppercase tracking-wider text-[10px] font-mono">🎯 Placement Guidance</div>
+                    <div class="bg-black/50 border border-white/[0.08] rounded p-3 text-[11px] space-y-1">
+                        <div class="font-bold text-amber-400 uppercase tracking-wider text-[10px] font-mono">[ PLACEMENT GUIDANCE ]</div>
                         <div id="modal-instructions" class="text-slate-300 leading-relaxed font-sans">
                             Save this file into your target storage directory. When an unauthorized user or spy opens it, HoneyGrid triggers an instant alert.
                         </div>
@@ -617,8 +549,8 @@
                 </div>
 
                 <div class="flex justify-between items-center pt-3 border-t border-white/[0.08]">
-                    <button onclick="resetModalToForm()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition">+ Deploy Another</button>
-                    <button onclick="closeModal('token-modal')" class="px-4 py-1.5 text-xs bg-white/[0.06] hover:bg-white/[0.12] text-white rounded-lg font-medium border border-white/[0.1] transition">Close & View in SOC</button>
+                    <button onclick="resetModalToForm()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition font-mono">+ DEPLOY ANOTHER</button>
+                    <button onclick="closeModal('token-modal')" class="px-3 py-1.5 text-xs bg-white/[0.06] hover:bg-white/[0.12] text-white rounded font-mono border border-white/[0.1] transition">CLOSE</button>
                 </div>
             </div>
         </div>
@@ -626,6 +558,21 @@
 
     <!-- Scripts for Leaflet & Telemetry Sync -->
     <script>
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function sanitizeJsArg(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/[^a-zA-Z0-9\.\:\-_]/g, '');
+        }
+
         let map;
         let markersLayer;
 
@@ -637,14 +584,13 @@
 
             // CARTO Basemaps Dark Matter
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_3l0n_1_cb31a2b53480eee66c2c97ae', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                attribution: '&copy; OpenStreetMap, &copy; CARTO',
                 subdomains: 'abcd',
                 maxZoom: 20
             }).addTo(map);
 
             markersLayer = L.layerGroup().addTo(map);
 
-            // Live Lat/Lon HUD tracking
             map.on('mousemove', function(e) {
                 const hud = document.getElementById('map-coords-hud');
                 if (hud) {
@@ -655,7 +601,6 @@
 
         async function refreshData() {
             try {
-                // Fetch stats
                 const statsRes = await fetch('/api/stats');
                 if (statsRes.status === 401) {
                     window.location.href = '/login';
@@ -668,14 +613,12 @@
                 document.getElementById('stat-attackers').innerText = stats.unique_attackers;
                 document.getElementById('token-count-badge').innerText = stats.total_tokens;
 
-                // Fetch incidents
                 const incidentsRes = await fetch('/api/incidents');
                 const incidents = await incidentsRes.json();
                 renderIncidents(incidents);
                 updateMapMarkers(incidents);
                 generateExecutiveReport(stats, incidents);
 
-                // Fetch tokens
                 const tokensRes = await fetch('/api/tokens');
                 const tokens = await tokensRes.json();
                 renderTokens(tokens);
@@ -690,21 +633,21 @@
                 if (inc.geo_lat && inc.geo_lon) {
                     const customIcon = L.divIcon({
                         className: 'radar-pulse-marker',
-                        iconSize: [16, 16],
-                        iconAnchor: [8, 8]
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7]
                     });
 
                     const marker = L.marker([inc.geo_lat, inc.geo_lon], { icon: customIcon }).addTo(markersLayer);
                     marker.bindPopup(`
-                        <div class="space-y-1.5 font-sans">
+                        <div class="space-y-1 font-mono text-[11px]">
                             <div class="flex items-center justify-between gap-2 border-b border-white/10 pb-1">
-                                <span class="font-bold text-rose-400 font-mono text-xs">${escapeHtml(inc.attacker_ip)}</span>
-                                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${inc.threat_score >= 70 ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}">${escapeHtml(inc.threat_score)}% Threat</span>
+                                <span class="font-bold text-rose-400">${escapeHtml(inc.attacker_ip)}</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] font-bold ${inc.threat_score >= 50 ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}">${escapeHtml(inc.threat_score)}% THREAT</span>
                             </div>
-                            <div class="text-slate-300"><strong>Location:</strong> ${escapeHtml(inc.geo_city || 'Unknown')}, ${escapeHtml(inc.geo_country)}</div>
-                            <div class="text-slate-400"><strong>ISP:</strong> ${escapeHtml(inc.geo_isp)}</div>
-                            <div class="text-slate-400"><strong>Vector:</strong> ${escapeHtml(inc.connection_type)}</div>
-                            <div class="pt-1 text-[9px] text-slate-500 font-mono">${escapeHtml(inc.timestamp.substring(0, 19))}</div>
+                            <div class="text-slate-300">LOC: ${escapeHtml(inc.geo_city || 'Unknown')}, ${escapeHtml(inc.geo_country)}</div>
+                            <div class="text-slate-400 truncate max-w-[170px]">ISP: ${escapeHtml(inc.geo_isp)}</div>
+                            <div class="text-slate-400">TYPE: ${escapeHtml(inc.connection_type)}</div>
+                            <div class="pt-1 text-[9px] text-slate-500">${escapeHtml(inc.timestamp.substring(0, 19))}</div>
                         </div>
                     `);
                 }
@@ -714,44 +657,49 @@
         function renderIncidents(incidents) {
             const tbody = document.getElementById('incidents-table-body');
             if (!incidents.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500 font-sans text-xs">No active security incidents detected. Decoys are quiet.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500 font-mono text-xs">No active security incidents detected. Decoys are quiet.</td></tr>';
                 return;
             }
 
             tbody.innerHTML = incidents.map(inc => {
-                let badgeClass = "bg-slate-800/80 text-slate-300 border-white/10";
-                if (inc.threat_score >= 70) badgeClass = "bg-rose-500/20 text-rose-400 border-rose-500/30";
-                else if (inc.threat_score >= 40) badgeClass = "bg-amber-500/20 text-amber-400 border-amber-500/30";
+                let badgeClass = "bg-white/[0.04] text-slate-300 border-white/10";
+                if (inc.threat_score >= 50) badgeClass = "bg-rose-500/15 text-rose-400 border-rose-500/30";
+                else if (inc.threat_score >= 30) badgeClass = "bg-amber-500/15 text-amber-400 border-amber-500/30";
 
                 const safeIp = sanitizeJsArg(inc.attacker_ip);
-                const gpu = inc.gpu_renderer ? `<div class="text-[10px] text-cyan-400 truncate max-w-[150px]" title="${escapeHtml(inc.gpu_renderer)}">GPU: ${escapeHtml(inc.gpu_renderer.split('/')[0])}</div>` : '';
-                const lanIp = inc.local_lan_ip ? `<div class="text-[10px] text-purple-400">LAN: ${escapeHtml(inc.local_lan_ip)}</div>` : '';
+                const gpu = inc.gpu_renderer ? `<div class="text-[10px] text-slate-400 truncate max-w-[140px]" title="${escapeHtml(inc.gpu_renderer)}">GPU: ${escapeHtml(inc.gpu_renderer.split('/')[0])}</div>` : '';
+                const lanIp = inc.local_lan_ip ? `<div class="text-[10px] text-slate-400">LAN: ${escapeHtml(inc.local_lan_ip)}</div>` : '';
 
                 return `
                     <tr class="hover:bg-white/[0.02] transition">
-                        <td class="p-3.5 text-slate-400 font-mono">${escapeHtml(inc.timestamp.substring(11, 19))}</td>
-                        <td class="p-3.5 font-bold text-white">
-                            <div>${escapeHtml(inc.attacker_ip)}</div>
+                        <td class="p-3 text-slate-400 font-mono tabular-nums">${escapeHtml(inc.timestamp.substring(11, 19))}</td>
+                        <td class="p-3 font-bold text-white font-mono">
+                            <div class="flex items-center gap-1.5">
+                                <span>${escapeHtml(inc.attacker_ip)}</span>
+                                <button onclick="copyToClipboard('${safeIp}')" title="Copy IP" class="text-slate-500 hover:text-white transition">
+                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                                </button>
+                            </div>
                             <div class="text-[10px] text-slate-500 font-sans">${escapeHtml(inc.connection_type)}</div>
                         </td>
-                        <td class="p-3.5">
+                        <td class="p-3">
                             <span class="px-2 py-0.5 rounded text-[10px] border ${badgeClass} font-bold font-mono">${escapeHtml(inc.threat_score)}%</span>
                         </td>
-                        <td class="p-3.5">
-                            <div class="text-slate-200 font-sans">${escapeHtml(inc.geo_city || 'Local')}, ${escapeHtml(inc.geo_country)}</div>
+                        <td class="p-3 font-mono">
+                            <div class="text-slate-200 text-xs">${escapeHtml(inc.geo_city || 'Local')}, ${escapeHtml(inc.geo_country)}</div>
                             <div class="text-[10px] text-slate-500 truncate max-w-[150px] font-sans">${escapeHtml(inc.geo_isp)}</div>
                         </td>
-                        <td class="p-3.5 font-sans">
+                        <td class="p-3 font-mono text-xs">
                             <div class="text-slate-300 text-[11px]">${escapeHtml(inc.client_tool)}</div>
                             ${gpu}
                             ${lanIp}
                         </td>
-                        <td class="p-3.5">
-                            <span class="text-rose-400 font-mono">${escapeHtml(inc.token_id)}</span>
+                        <td class="p-3">
+                            <span class="text-rose-400 font-mono text-xs">${escapeHtml(inc.token_id)}</span>
                         </td>
-                        <td class="p-3.5 text-right font-sans">
-                            <button onclick="isolateIP('${safeIp}')" class="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800 text-rose-300 rounded text-[10px] font-medium transition active:scale-[0.98]">
-                                🛡️ Isolate IP
+                        <td class="p-3 text-right font-mono">
+                            <button onclick="isolateIP('${safeIp}')" class="px-2 py-1 bg-white/[0.04] hover:bg-rose-500/15 border border-white/10 hover:border-rose-500/30 text-slate-300 hover:text-rose-300 rounded text-[10px] transition active:scale-[0.98]">
+                                ISOLATE IP
                             </button>
                         </td>
                     </tr>
@@ -762,7 +710,7 @@
         function renderTokens(tokens) {
             const tbody = document.getElementById('tokens-table-body');
             if (!tokens.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500 font-sans text-xs">No deception assets deployed in your workspace. Click "Deploy Deception Trap" to plant your first canary.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500 font-mono text-xs">No deception assets deployed in your workspace. Click "Deploy Trap" to plant your first canary.</td></tr>';
                 return;
             }
             const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.is_admin);
@@ -772,24 +720,24 @@
                 const ownerTag = (isAdmin && t.owner_email) ? `<div class="text-[10px] text-slate-500 font-sans">Owner: ${escapeHtml(t.owner_email)}</div>` : '';
                 return `
                 <tr class="hover:bg-white/[0.02] transition">
-                    <td class="p-3.5 text-cyan-400 font-bold font-mono">
+                    <td class="p-3 text-slate-200 font-bold font-mono">
                         <div>${escapeHtml(t.id)}</div>
                         ${ownerTag}
                     </td>
-                    <td class="p-3.5 text-amber-400 uppercase text-[10px] font-sans">
-                        <span class="px-2 py-0.5 rounded bg-black/40 border border-white/[0.08]">${escapeHtml(t.token_type)}</span>
+                    <td class="p-3 uppercase text-[10px] font-mono">
+                        <span class="px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-amber-400">${escapeHtml(t.token_type)}</span>
                     </td>
-                    <td class="p-3.5 text-white font-sans font-medium">${escapeHtml(t.label)}</td>
-                    <td class="p-3.5 font-bold text-rose-400 font-mono">${escapeHtml(t.trigger_count)}</td>
-                    <td class="p-3.5 text-slate-400 font-mono">${escapeHtml(t.created_at.substring(0, 10))}</td>
-                    <td class="p-3.5 text-slate-400 font-sans truncate max-w-[180px]" title="${escapeHtml(canaryUrl)}">${escapeHtml(canaryUrl || 'Tripwire')}</td>
-                    <td class="p-3.5 text-right space-x-1.5 whitespace-nowrap font-sans">
-                        <a href="/api/tokens/${safeTokenId}/download" download class="px-2.5 py-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 rounded text-[11px] inline-flex items-center gap-1 transition font-medium">
-                            📥 Download
+                    <td class="p-3 text-white font-sans font-medium text-xs">${escapeHtml(t.label)}</td>
+                    <td class="p-3 font-bold text-rose-400 font-mono tabular-nums">${escapeHtml(t.trigger_count)}</td>
+                    <td class="p-3 text-slate-400 font-mono tabular-nums text-xs">${escapeHtml(t.created_at.substring(0, 10))}</td>
+                    <td class="p-3 text-slate-400 font-mono truncate max-w-[170px] text-xs" title="${escapeHtml(canaryUrl)}">${escapeHtml(canaryUrl || 'Tripwire')}</td>
+                    <td class="p-3 text-right space-x-1.5 whitespace-nowrap font-mono text-xs">
+                        <a href="/api/tokens/${safeTokenId}/download" download class="px-2 py-1 bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/[0.1] rounded text-[10px] inline-flex items-center gap-1 transition">
+                            DOWNLOAD
                         </a>
                         ${canaryUrl ? `
-                        <button onclick="copyToClipboard('${escapeHtml(canaryUrl)}')" class="px-2 py-1 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/[0.1] rounded text-[11px] inline-flex items-center gap-1 transition" title="Copy Canary URL">
-                            📋 Copy
+                        <button onclick="copyToClipboard('${escapeHtml(canaryUrl)}')" class="px-2 py-1 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/[0.1] rounded text-[10px] inline-flex items-center gap-1 transition" title="Copy Canary URL">
+                            COPY URL
                         </button>
                         ` : ''}
                     </td>
@@ -820,7 +768,8 @@ Tor routing, or automated vulnerability scanning tools).
 2. INDICATORS OF COMPROMISE (IOCs)
 --------------------------------------------------------------------------------
 Adversary Network Origins:
-${iocs.length ? iocs.map(ip => `  • ${ip}`).join('\n') : '  • None detected'}
+${iocs.length ? iocs.map(ip => `  • ${ip}`).join('
+') : '  • None detected'}
 
 MITRE ATT&CK Framework Mapping:
   • T1552.001 - Unsecured Credentials in Files (.env / AWS IAM)
@@ -855,7 +804,6 @@ interfaces without revealing surveillance mechanisms to the attacker.
             alert(data.message);
         }
 
-
         let detectedClientIp = '';
 
         async function fetchSafeList() {
@@ -865,7 +813,7 @@ interfaces without revealing surveillance mechanisms to the attacker.
                 const data = await res.json();
                 detectedClientIp = data.client_ip || '';
                 const el = document.getElementById('detected-client-ip');
-                if (el) el.innerText = detectedClientIp + (data.is_client_safe ? ' (SAFE)' : ' (Not on safe list)');
+                if (el) el.innerText = detectedClientIp + (data.is_client_safe ? ' [SAFE]' : ' [UNLISTED]');
 
                 const container = document.getElementById('safelist-items');
                 if (!container) return;
@@ -879,8 +827,8 @@ interfaces without revealing surveillance mechanisms to the attacker.
                             <span class="text-emerald-400 font-bold font-mono">${escapeHtml(item.ip)}</span>
                             <span class="text-slate-400 text-[11px] font-sans ml-2">${escapeHtml(item.label)}</span>
                         </div>
-                        <button onclick="removeSafeIp('${sanitizeJsArg(item.ip)}')" class="text-rose-400 hover:text-rose-300 text-xs px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition">
-                            Remove
+                        <button onclick="removeSafeIp('${sanitizeJsArg(item.ip)}')" class="text-rose-400 hover:text-rose-300 text-xs px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition font-mono">
+                            REMOVE
                         </button>
                     </div>
                 `).join('');
@@ -938,7 +886,7 @@ interfaces without revealing surveillance mechanisms to the attacker.
         async function submitNewToken() {
             const submitBtn = document.getElementById('modal-submit-btn');
             submitBtn.disabled = true;
-            submitBtn.innerText = 'Synthesizing Trap...';
+            submitBtn.innerText = 'SYNTHESIZING TRAP...';
 
             const type = document.getElementById('modal-type').value;
             const label = document.getElementById('modal-label').value || `Decoy-${type.toUpperCase()}`;
@@ -960,7 +908,7 @@ interfaces without revealing surveillance mechanisms to the attacker.
                 alert('Error generating token: ' + e.message);
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.innerText = 'Generate Trap File';
+                submitBtn.innerText = 'GENERATE TRAP FILE';
             }
         }
 
@@ -978,23 +926,23 @@ interfaces without revealing surveillance mechanisms to the attacker.
             const tokenType = (data.token.token_type || '').toLowerCase();
 
             if (tokenType.includes('pdf')) {
-                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Save this PDF in your local <code>Documents</code> folder, OneDrive, or Google Drive. When an unauthorized user, spy, or malware opens it, HoneyGrid immediately tracks their IP, unmasks their ISP & location, and triggers a Discord SOC alert.`;
-                dlLink.innerHTML = `<span>📥 Download Canary PDF (${data.token.label}.pdf)</span>`;
+                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Save this PDF in your local <code>Documents</code> folder, OneDrive, or Google Drive. When an unauthorized user or spy opens it, HoneyGrid immediately tracks their IP, unmasks their ISP &amp; location, and triggers a Discord SOC alert.`;
+                dlLink.innerHTML = `<span>DOWNLOAD CANARY PDF (${escapeHtml(data.token.label)}.pdf)</span>`;
             } else if (tokenType.includes('env')) {
                 instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Drop this <code>.env</code> file in a project folder or backup archive. When an adversary extracts or inspects it, any attempt to verify the database or sync URL trips the alarm.`;
-                dlLink.innerHTML = `<span>📥 Download Decoy .env File</span>`;
+                dlLink.innerHTML = `<span>DOWNLOAD DECOY .ENV FILE</span>`;
             } else if (tokenType.includes('aws')) {
                 instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Save as <code>~/.aws/credentials</code>. Automated bots, infostealers, or malicious insiders searching for AWS secrets will trip the canary immediately.`;
-                dlLink.innerHTML = `<span>📥 Download AWS Credentials File</span>`;
+                dlLink.innerHTML = `<span>DOWNLOAD AWS CREDENTIALS FILE</span>`;
             } else if (tokenType.includes('git')) {
                 instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Extract this archive into your dev workspace. If anyone runs <code>git pull</code> or <code>git fetch</code>, the remote origin canary trips the trap.`;
-                dlLink.innerHTML = `<span>📥 Download Git Decoy (.zip)</span>`;
+                dlLink.innerHTML = `<span>DOWNLOAD GIT DECOY (.ZIP)</span>`;
             } else if (tokenType.includes('keepass')) {
                 instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Place this <code>passwords.kdbx</code> database on your Desktop or file share. Any attempt to inspect or open this fake password vault alerts the SOC.`;
-                dlLink.innerHTML = `<span>📥 Download KeePass Vault (.kdbx)</span>`;
+                dlLink.innerHTML = `<span>DOWNLOAD KEEPASS VAULT (.KDBX)</span>`;
             } else {
-                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Embed this Canary URL inside corporate wikis, internal tickets, or confidential documents. Any click logs the visitor's hardware & network telemetry.`;
-                dlLink.innerHTML = `<span>📥 Download Canary URL Shortcut</span>`;
+                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Embed this Canary URL inside corporate wikis, internal tickets, or confidential documents. Any click logs the visitor's hardware &amp; network telemetry.`;
+                dlLink.innerHTML = `<span>DOWNLOAD CANARY SHORTCUT</span>`;
             }
         }
 
@@ -1008,19 +956,19 @@ interfaces without revealing surveillance mechanisms to the attacker.
         function copyToClipboard(text) {
             if (!text) return;
             navigator.clipboard.writeText(text).then(() => {
-                alert('Copied canary URL to clipboard: ' + text);
+                alert('Copied to clipboard: ' + text);
             }).catch(() => {
-                prompt('Copy this canary URL:', text);
+                prompt('Copy value:', text);
             });
         }
 
         function switchTab(tab) {
             ['incidents', 'tokens', 'report'].forEach(t => {
                 document.getElementById(`tab-${t}`).classList.add('hidden');
-                document.getElementById(`tab-btn-${t}`).className = "px-4 py-2 text-xs font-medium rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-200 flex items-center gap-2";
+                document.getElementById(`tab-btn-${t}`).className = "px-3.5 py-1.5 text-xs font-mono font-medium rounded transition-all text-slate-400 hover:text-slate-200 flex items-center gap-2";
             });
             document.getElementById(`tab-${tab}`).classList.remove('hidden');
-            document.getElementById(`tab-btn-${tab}`).className = "px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-200 bg-rose-600 text-white shadow-sm flex items-center gap-2";
+            document.getElementById(`tab-btn-${tab}`).className = "px-3.5 py-1.5 text-xs font-mono font-semibold rounded transition-all bg-white/[0.08] text-white border border-white/[0.08] shadow-sm flex items-center gap-2";
         }
 
         function openModal(id) {
@@ -1081,7 +1029,7 @@ interfaces without revealing surveillance mechanisms to the attacker.
             if (authed) {
                 initMap();
                 refreshData();
-                setInterval(refreshData, 10000); // Poll every 10 seconds
+                setInterval(refreshData, 10000);
             }
         };
     </script>

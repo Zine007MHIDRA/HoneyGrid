@@ -12,12 +12,14 @@ from honeygrid.database import (
     get_dashboard_stats, update_incident_telemetry,
     create_user, get_user_by_email, get_user_auth_record_by_email, get_user_by_id,
     create_session, get_user_by_session, delete_session,
-    add_safe_ip, remove_safe_ip, list_safe_ips, is_safe_ip
+    add_safe_ip, remove_safe_ip, list_safe_ips, is_safe_ip,
+    list_audit_logs
 )
 from honeygrid.models import IncidentEvent, Token, BrowserTelemetry, User, UserRegister, UserLogin
 from honeygrid.core.auth import hash_password, verify_password, generate_captcha, verify_captcha
 from honeygrid.core.rate_limit import login_limiter
 from honeygrid.core.fingerprint import extract_client_ip, identify_client_tool
+from honeygrid.core.audit import log_audit_event
 from honeygrid.core.geo import lookup_ip_geolocation
 from honeygrid.core.threat_intel import analyze_ip_threat
 from honeygrid.alerts.discord import send_discord_alert
@@ -132,11 +134,24 @@ def process_incident_async(
     query_params: str,
     headers_dict: dict
 ):
-    """Background task to resolve GeoIP, threat intel, record incident and dispatch Discord alert."""
+    """
+    Background task to resolve GeoIP, threat intel, record incident and dispatch Discord alert.
+    Hardened with isolated try/except blocks so failure in network lookups or Discord never
+    prevents database incident recording.
+    """
     try:
-        geo = lookup_ip_geolocation(raw_ip)
+        try:
+            geo = lookup_ip_geolocation(raw_ip)
+        except Exception as ge:
+            print(f"[!] GeoIP lookup failed: {ge}")
+            geo = {"ip": raw_ip, "country": "Unknown", "city": "Unknown", "region": "Unknown", "isp": "Unknown", "asn": "Unknown"}
+
         reported_ip = geo.get("query_ip") if is_local and geo.get("query_ip") else raw_ip
-        threat_profile = analyze_ip_threat(reported_ip, geo)
+        try:
+            threat_profile = analyze_ip_threat(reported_ip, geo)
+        except Exception as te:
+            print(f"[!] Threat analysis failed: {te}")
+            threat_profile = {"threat_score": 15, "connection_type": "Direct Unknown", "is_vpn_proxy": False, "is_tor": False}
 
         # Check if caller IP is on Operator Safe List
         is_safe = is_safe_ip(reported_ip)
@@ -170,10 +185,23 @@ def process_incident_async(
         
         token = get_token(token_id)
         record_incident(event)
-        send_discord_alert(event, token)
+        
+        try:
+            send_discord_alert(event, token)
+        except Exception as de:
+            print(f"[!] Discord alerting failed: {de}")
+            
         print(f"[!] TRIPPED: Token '{token_id}' by IP {reported_ip} [{threat_profile.get('connection_type')} - Threat: {threat_profile.get('threat_score')}%]")
     except Exception as e:
-        print(f"[!] Error in background incident processing: {e}")
+        print(f"[!] Critical error in background incident processing: {e}")
+        log_audit_event(
+            action="CANARY_PROCESSING_FAILURE",
+            outcome="FAILURE",
+            actor="system",
+            client_ip=raw_ip,
+            target=token_id,
+            metadata={"error": str(e), "path": request_path}
+        )
 
 # -------------------------------------------------------------
 # Web Navigation Routes (Portal & Dashboard)
@@ -233,23 +261,30 @@ async def api_captcha():
 
 @app.post("/api/auth/register")
 async def api_register(data: UserRegister, request: Request):
+    client_ip, _ = extract_client_ip(request)
+    email = data.email.strip().lower() if data.email else ""
+
     # 1. Anti-bot honeypot check
     if data.hp_decoy_field:
+        log_audit_event("AUTH_REGISTER_BOT_BLOCKED", "BLOCKED", actor=email or "unknown", client_ip=client_ip)
         return JSONResponse({"status": "error", "message": "Automated bot activity detected and blocked."}, status_code=403)
 
     # 2. CAPTCHA verification
     if not data.captcha_answer or not data.captcha_token or not verify_captcha(data.captcha_answer, data.captcha_token, settings.HONEYGRID_SECRET_KEY):
+        log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email or "unknown", client_ip=client_ip, metadata={"reason": "captcha_invalid"})
         return JSONResponse({"status": "error", "message": "Security verification code is incorrect or expired. Please reload challenge."}, status_code=400)
 
-    email = data.email.strip().lower()
     password = data.password
     if not email or "@" not in email:
+        log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email or "unknown", client_ip=client_ip, metadata={"reason": "invalid_email"})
         return JSONResponse({"status": "error", "message": "Valid corporate or personal email required"}, status_code=400)
     if len(password) < 6:
+        log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email, client_ip=client_ip, metadata={"reason": "password_too_short"})
         return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
     
     existing = get_user_by_email(email)
     if existing:
+        log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email, client_ip=client_ip, metadata={"reason": "user_already_exists"})
         return JSONResponse({"status": "error", "message": "An operator account with this email already exists. Please sign in."}, status_code=400)
     
     # Auto-grant admin role if email matches settings.ADMIN_EMAIL
@@ -259,6 +294,7 @@ async def api_register(data: UserRegister, request: Request):
     
     # Create persistent session
     session_token = create_session(user.id, expire_hours=settings.SESSION_EXPIRE_HOURS)
+    log_audit_event("AUTH_REGISTER_SUCCESS", "SUCCESS", actor=user.email, client_ip=client_ip, target=str(user.id), metadata={"role": user.role})
     
     resp = JSONResponse({
         "status": "success",
@@ -279,10 +315,12 @@ async def api_register(data: UserRegister, request: Request):
 @app.post("/api/auth/login")
 async def api_login(data: UserLogin, request: Request):
     client_ip, _ = extract_client_ip(request)
+    email = data.email.strip().lower() if data.email else ""
 
     # 0. Brute-Force Rate Limiting & Lockout Check
     is_locked, remaining = login_limiter.is_locked(client_ip)
     if is_locked:
+        log_audit_event("RATE_LIMIT_LOCKOUT", "BLOCKED", actor=email or "unknown", client_ip=client_ip, metadata={"remaining_seconds": remaining})
         return JSONResponse(
             {
                 "status": "error",
@@ -295,20 +333,23 @@ async def api_login(data: UserLogin, request: Request):
     # 1. Anti-bot honeypot check
     if data.hp_decoy_field:
         login_limiter.record_failure(client_ip)
+        log_audit_event("AUTH_LOGIN_BOT_BLOCKED", "BLOCKED", actor=email or "unknown", client_ip=client_ip)
         return JSONResponse({"status": "error", "message": "Automated bot activity detected and blocked."}, status_code=403)
 
     # 2. CAPTCHA verification
     if not data.captcha_answer or not data.captcha_token or not verify_captcha(data.captcha_answer, data.captcha_token, settings.HONEYGRID_SECRET_KEY):
+        log_audit_event("AUTH_LOGIN_CAPTCHA_FAIL", "FAILURE", actor=email or "unknown", client_ip=client_ip)
         return JSONResponse({"status": "error", "message": "Security verification code is incorrect or expired. Please reload challenge."}, status_code=400)
 
-    email = data.email.strip().lower()
     password = data.password
     if not email or not password:
+        log_audit_event("AUTH_LOGIN_FAILURE", "FAILURE", actor=email or "unknown", client_ip=client_ip, metadata={"reason": "missing_credentials"})
         return JSONResponse({"status": "error", "message": "Email and password required"}, status_code=400)
     
     record = get_user_auth_record_by_email(email)
     if not record or not verify_password(password, record["password_hash"], record["salt"]):
         failures = login_limiter.record_failure(client_ip)
+        log_audit_event("AUTH_LOGIN_FAILURE", "FAILURE", actor=email, client_ip=client_ip, metadata={"failures": failures})
         remaining_attempts = max(0, 5 - failures)
         msg = "Invalid email or access passphrase."
         if 0 < remaining_attempts < 4:
@@ -331,6 +372,8 @@ async def api_login(data: UserLogin, request: Request):
     
     expire_hours = settings.SESSION_EXPIRE_HOURS if data.remember_me else 24
     session_token = create_session(user.id, expire_hours=expire_hours)
+    log_audit_event("AUTH_LOGIN_SUCCESS", "SUCCESS", actor=user.email, client_ip=client_ip, target=str(user.id), metadata={"role": user.role})
+    
     resp = JSONResponse({
         "status": "success",
         "message": "Identity authenticated",
@@ -349,9 +392,12 @@ async def api_login(data: UserLogin, request: Request):
 
 @app.post("/api/auth/logout")
 async def api_logout(request: Request):
+    client_ip, _ = extract_client_ip(request)
+    user = get_current_user(request)
     session_token = request.cookies.get(settings.SESSION_COOKIE_NAME)
     if session_token:
         delete_session(session_token)
+    log_audit_event("AUTH_LOGOUT", "SUCCESS", actor=user.email if user else "session", client_ip=client_ip)
     resp = JSONResponse({"status": "success", "message": "Session terminated", "redirect": "/login"})
     resp.delete_cookie(key=settings.SESSION_COOKIE_NAME)
     return resp
@@ -391,10 +437,12 @@ async def api_add_safelist(request: Request, data: Dict[str, Any]):
     if not user:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     
-    ip = data.get("ip") or extract_client_ip(request)[0]
+    client_ip, _ = extract_client_ip(request)
+    ip = data.get("ip") or client_ip
     label = data.get("label", f"Operator Workstation ({user.email})")
     
     success = add_safe_ip(ip, label=label, added_by=user.email)
+    log_audit_event("SAFELIST_ADD", "SUCCESS" if success else "FAILURE", actor=user.email, client_ip=client_ip, target=ip, metadata={"label": label})
     if success:
         return {"status": "success", "message": f"IP {ip} added to Operator Safe List."}
     return JSONResponse({"status": "error", "message": "Invalid IP address"}, status_code=400)
@@ -405,11 +453,13 @@ async def api_remove_safelist(request: Request, data: Dict[str, Any]):
     if not user:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     
+    client_ip, _ = extract_client_ip(request)
     ip = data.get("ip")
     if not ip:
         return JSONResponse({"status": "error", "message": "IP required"}, status_code=400)
         
     removed = remove_safe_ip(ip)
+    log_audit_event("SAFELIST_REMOVE", "SUCCESS" if removed else "NOT_FOUND", actor=user.email, client_ip=client_ip, target=ip)
     return {"status": "success", "removed": removed, "message": f"IP {ip} removed from Operator Safe List."}
 
 @app.get("/api/stats")
@@ -427,6 +477,14 @@ async def api_incidents(request: Request, limit: int = 50):
     incidents = list_incidents(user_id=user.id, is_admin=user.is_admin, limit=limit)
     return [i.model_dump() for i in incidents]
 
+@app.get("/api/audit-logs")
+async def api_get_audit_logs(request: Request, limit: int = 50, action: Optional[str] = None):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    logs = list_audit_logs(limit=limit, action=action)
+    return {"status": "success", "audit_logs": logs}
+
 @app.get("/api/tokens")
 async def api_tokens(request: Request):
     user = get_current_user(request)
@@ -441,6 +499,7 @@ async def api_create_token(request: Request, data: Dict[str, Any]):
     if not user:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
+    client_ip, _ = extract_client_ip(request)
     token_type = data.get("token_type", "web")
     label = data.get("label", f"Decoy-{token_type.upper()}")
     desc = data.get("description", "Generated from Sentinel SOC Dashboard")
@@ -460,6 +519,8 @@ async def api_create_token(request: Request, data: Dict[str, Any]):
     else:
         token, _ = create_web_canary_token(label, desc, owner_id=user.id, owner_email=user.email)
         
+    log_audit_event("TOKEN_CREATE", "SUCCESS", actor=user.email, client_ip=client_ip, target=token.id, metadata={"type": token_type, "label": label})
+
     return {
         "status": "success",
         "token": token.model_dump(),
@@ -503,12 +564,16 @@ async def api_isolate_ip(request: Request, data: Dict[str, Any]):
     if not user:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
+    client_ip, _ = extract_client_ip(request)
     ip = data.get("ip")
     if not ip:
         return JSONResponse({"status": "error", "message": "IP required"}, status_code=400)
         
+    log_audit_event("CONTAINMENT_ATTEMPT", "ATTEMPT", actor=user.email, client_ip=client_ip, target=ip)
+
     # Operator Safety: Block isolation if IP is on Safe List
     if is_safe_ip(ip):
+        log_audit_event("CONTAINMENT_BLOCKED", "BLOCKED_SAFELIST", actor=user.email, client_ip=client_ip, target=ip, metadata={"reason": "safelist"})
         return JSONResponse({
             "status": "error",
             "applied": False,
@@ -516,6 +581,7 @@ async def api_isolate_ip(request: Request, data: Dict[str, Any]):
         }, status_code=400)
 
     result = block_ip(ip)
+    log_audit_event("CONTAINMENT_RESULT", "SUCCESS" if result.get("applied") else "NO_OP", actor=user.email, client_ip=client_ip, target=ip, metadata=result)
     return result
 
 # -------------------------------------------------------------

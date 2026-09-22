@@ -3,6 +3,8 @@ from typing import Dict, Any
 from honeygrid.config import settings
 from honeygrid.core.fingerprint import is_private_ip
 
+from honeygrid.core.tor import is_tor_exit_node
+
 # Known major datacenter / hosting ASN keywords indicative of cloud scanners, VPNs or proxies
 HOSTING_KEYWORDS = [
     "digitalocean", "amazon", "aws", "microsoft", "azure", "google", "ovh",
@@ -26,38 +28,30 @@ def analyze_ip_threat(ip_address: str, geo_data: Dict[str, Any]) -> Dict[str, An
             "threat_level": "LOW"
         }
 
+    # 1. Real Tor Exit-Node Verification
+    is_tor = is_tor_exit_node(ip_address)
+
+    # 2. Network & ASN Keyword Inspection
     isp = geo_data.get("isp", "").lower()
     asn = geo_data.get("asn", "").lower()
     org = geo_data.get("org", "").lower() if "org" in geo_data else ""
-    
     combined_network_str = f"{isp} {asn} {org}"
 
     is_datacenter = any(kw in combined_network_str for kw in HOSTING_KEYWORDS)
-    is_vpn_proxy = False
-    is_tor = False
-    threat_score = 15  # Base score for any external hit on a honeytoken
+    is_vpn_proxy = is_tor or geo_data.get("is_proxy", False)
+    
+    # Calculate base threat score
+    threat_score = 15  # Base score for touching a deception trap
 
-    # Check for Tor exit nodes or proxy indicators via ip-api flags if available
-    try:
-        url = f"http://ip-api.com/json/{ip_address}?fields=status,mobile,proxy,hosting"
-        resp = requests.get(url, timeout=3.0)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("status") == "success":
-                if data.get("proxy"):
-                    is_vpn_proxy = True
-                    threat_score += 45
-                if data.get("hosting"):
-                    is_datacenter = True
-                    threat_score += 35
-    except Exception:
-        pass
+    if is_tor:
+        threat_score = 95
+    elif is_vpn_proxy:
+        threat_score = 65
+    elif is_datacenter:
+        threat_score = 50
 
-    if is_datacenter and not is_vpn_proxy:
-        threat_score += 35
-
-    # Cap threat score
     threat_score = min(threat_score, 100)
+
 
     # Determine connection type badge
     if is_tor:

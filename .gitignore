@@ -31,6 +31,7 @@ wheels/
 *.db
 *.sqlite3
 honeygrid.db
+.tor_exit_cache.txt
 
 # Logs
 logs/
