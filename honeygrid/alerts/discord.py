@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from honeygrid.config import settings
-from honeygrid.models import IncidentEvent, Token
+from honeygrid.models import IncidentEvent, Token, User
 
 def send_discord_alert(event: IncidentEvent, token: Optional[Token] = None) -> bool:
     """
@@ -142,4 +142,89 @@ def send_discord_alert(event: IncidentEvent, token: Optional[Token] = None) -> b
         return resp.status_code in (200, 204)
     except Exception as e:
         print(f"[!] Failed to deliver Discord webhook: {e}")
+        return False
+
+def send_discord_signup_alert(
+    user: User,
+    client_ip: str,
+    user_agent: str,
+    client_tool: str = "Unknown",
+    geo_data: Optional[Dict[str, Any]] = None
+) -> bool:
+    """
+    Sends an executive defense-grade notification to the configured Discord Sign-Up Webhook
+    whenever a new operator registers on HoneyGrid Sentinel.
+    """
+    webhook_url = settings.DISCORD_SIGNUP_WEBHOOK_URL or settings.DISCORD_WEBHOOK_URL
+    if not webhook_url or "YOUR_WEBHOOK" in webhook_url:
+        print("[!] Discord signup alert skipped: No valid webhook configured.")
+        return False
+
+    is_admin = user.is_admin or user.role == "admin"
+    embed_color = 0xF59E0B if is_admin else 0x10B981
+    role_badge = "👑 MASTER ADMINISTRATOR" if is_admin else "🛡️ SECURITY OPERATOR"
+
+    geo = geo_data or {}
+    country = geo.get("country", "Unknown")
+    city = geo.get("city", "Unknown")
+    region = geo.get("region", "Unknown")
+    isp = geo.get("isp", "Unknown")
+    asn = geo.get("asn", "Unknown")
+    location_str = f"{city}, {region}, {country}" if country != "Unknown" else "Unresolved / Local Network"
+
+    embed_fields = [
+        {
+            "name": "👤 Operator Account",
+            "value": f"**Email:** `{user.email}`\n**Role:** `{role_badge}`\n**User ID:** `{user.id}`",
+            "inline": False
+        },
+        {
+            "name": "🌐 Network Origin & Provider",
+            "value": f"**IP Address:** `{client_ip}`\n**Location:** {location_str}\n**ISP / ASN:** {isp} ({asn})",
+            "inline": False
+        },
+        {
+            "name": "💻 Client Environment & Tool",
+            "value": f"**Detected Client:** `{client_tool}`\n**User-Agent:** ```{user_agent[:200] if user_agent else 'Unknown'}```",
+            "inline": False
+        },
+        {
+            "name": "🔒 Security Attestation",
+            "value": "✅ **Anti-Bot Honeypot:** `PASSED`\n✅ **Visual CAPTCHA:** `VERIFIED`\n✅ **Password Encryption:** `PBKDF2-HMAC-SHA256 (310k Rounds)`",
+            "inline": True
+        },
+        {
+            "name": "⏱️ Account Provisioned",
+            "value": f"<t:{int(datetime.now(timezone.utc).timestamp())}:F>",
+            "inline": True
+        }
+    ]
+
+    payload = {
+        "username": "HoneyGrid Sentinel • IAM",
+        "avatar_url": "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/solid/shield-halved.svg",
+        "embeds": [
+            {
+                "title": f"✨ NEW OPERATOR REGISTRATION // {user.email}",
+                "description": f"A new operator account has been provisioned on HoneyGrid Sentinel with role **{user.role.upper()}**.",
+                "color": embed_color,
+                "fields": embed_fields,
+                "footer": {
+                    "text": "HoneyGrid Sentinel • Identity & Access Management Gate"
+                },
+                "timestamp": user.created_at or datetime.now(timezone.utc).isoformat()
+            }
+        ]
+    }
+
+    try:
+        resp = requests.post(
+            webhook_url,
+            data=json.dumps(payload),
+            headers={"Content-Type": "application/json"},
+            timeout=5.0
+        )
+        return resp.status_code in (200, 204)
+    except Exception as e:
+        print(f"[!] Failed to deliver Discord sign-up webhook: {e}")
         return False

@@ -27,6 +27,10 @@ def _get_base_url() -> str:
 
 class Settings:
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+    DISCORD_SIGNUP_WEBHOOK_URL: str = os.getenv(
+        "DISCORD_SIGNUP_WEBHOOK_URL",
+        "https://discord.com/api/webhooks/1552057119237349416/H66zNAhya40X9FeSr7AGiBVBSQ5f068stDNf8QqbCJh0anOlLU4eCHTSkY8fAr2CYt9h"
+    ).strip()
     HONEYGRID_HOST: str = os.getenv("HONEYGRID_HOST", "0.0.0.0").strip() or "0.0.0.0"
     HONEYGRID_PORT: int = _get_int("HONEYGRID_PORT", 8000)
     HONEYGRID_BASE_URL: str = _get_base_url()

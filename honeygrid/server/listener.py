@@ -22,7 +22,7 @@ from honeygrid.core.fingerprint import extract_client_ip, identify_client_tool
 from honeygrid.core.audit import log_audit_event
 from honeygrid.core.geo import lookup_ip_geolocation
 from honeygrid.core.threat_intel import analyze_ip_threat
-from honeygrid.alerts.discord import send_discord_alert
+from honeygrid.alerts.discord import send_discord_alert, send_discord_signup_alert
 from honeygrid.core.containment import block_ip
 from honeygrid.core.generator import (
     create_web_canary_token, create_aws_honeytoken, create_env_honeytoken,
@@ -263,7 +263,7 @@ async def api_captcha():
     }
 
 @app.post("/api/auth/register")
-async def api_register(data: UserRegister, request: Request):
+async def api_register(data: UserRegister, request: Request, background_tasks: BackgroundTasks):
     client_ip, _ = extract_client_ip(request)
     email = data.email.strip().lower() if data.email else ""
 
@@ -298,6 +298,20 @@ async def api_register(data: UserRegister, request: Request):
     # Create persistent session
     session_token = create_session(user.id, expire_hours=settings.SESSION_EXPIRE_HOURS)
     log_audit_event("AUTH_REGISTER_SUCCESS", "SUCCESS", actor=user.email, client_ip=client_ip, target=str(user.id), metadata={"role": user.role})
+
+    # Dispatch Discord Sign-Up Notification in background
+    headers_dict = dict(request.headers)
+    user_agent = headers_dict.get("user-agent", "")
+    client_tool = identify_client_tool(user_agent)
+
+    def _async_notify_signup(u: User, ip: str, ua: str, tool: str):
+        try:
+            geo = lookup_ip_geolocation(ip)
+        except Exception:
+            geo = {}
+        send_discord_signup_alert(user=u, client_ip=ip, user_agent=ua, client_tool=tool, geo_data=geo)
+
+    background_tasks.add_task(_async_notify_signup, user, client_ip, user_agent, client_tool)
     
     resp = JSONResponse({
         "status": "success",

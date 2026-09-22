@@ -19,7 +19,8 @@ from honeygrid.database import (
     record_incident, list_incidents, list_audit_logs,
     get_user_by_email, create_user
 )
-from honeygrid.models import IncidentEvent
+from honeygrid.models import IncidentEvent, User
+from honeygrid.alerts.discord import send_discord_signup_alert
 from honeygrid.server.listener import app, process_incident_async
 
 
@@ -169,6 +170,43 @@ class TestAdversarialHardening(unittest.TestCase):
         self.assertEqual(data.get("status"), "success")
         self.assertIsInstance(data.get("audit_logs"), list)
         self.assertGreater(len(data.get("audit_logs")), 0)
+
+    def test_discord_signup_webhook_dispatch(self):
+        """send_discord_signup_alert formats payload correctly and delivers to webhook."""
+        dummy_user = User(
+            id=f"usr_{uuid.uuid4().hex[:8]}",
+            email=f"operator_{uuid.uuid4().hex[:6]}@corp.internal",
+            role="user",
+            created_at="2026-09-22T20:46:00Z"
+        )
+        
+        with patch("requests.post") as mock_post:
+            mock_post.return_value.status_code = 204
+            
+            res = send_discord_signup_alert(
+                user=dummy_user,
+                client_ip="203.0.113.19",
+                user_agent="Mozilla/5.0 TestBrowser",
+                client_tool="Custom Browser",
+                geo_data={"country": "Morocco", "city": "Rabat", "isp": "IAM", "asn": "AS36903"}
+            )
+            
+            self.assertTrue(res)
+            self.assertTrue(mock_post.called)
+            called_args, called_kwargs = mock_post.call_args
+            called_url = called_args[0] if called_args else called_kwargs.get("url")
+            self.assertIn("discord.com/api/webhooks", called_url)
+            
+            import json
+            payload = json.loads(called_kwargs.get("data", "{}"))
+            self.assertEqual(payload["username"], "HoneyGrid Sentinel • IAM")
+            embed = payload["embeds"][0]
+            self.assertIn(dummy_user.email, embed["title"])
+            field_names = [f["name"] for f in embed["fields"]]
+            self.assertTrue(any("Operator Account" in n for n in field_names))
+            self.assertTrue(any("Network Origin" in n for n in field_names))
+            self.assertTrue(any("Client Environment" in n for n in field_names))
+            self.assertTrue(any("Security Attestation" in n for n in field_names))
 
 
 if __name__ == "__main__":
