@@ -768,8 +768,7 @@ Tor routing, or automated vulnerability scanning tools).
 2. INDICATORS OF COMPROMISE (IOCs)
 --------------------------------------------------------------------------------
 Adversary Network Origins:
-${iocs.length ? iocs.map(ip => `  • ${ip}`).join('
-') : '  • None detected'}
+${iocs.length ? iocs.map(ip => `  • ${ip}`).join('\n') : '  • None detected'}
 
 MITRE ATT&CK Framework Mapping:
   • T1552.001 - Unsecured Credentials in Files (.env / AWS IAM)

@@ -208,6 +208,39 @@ class TestAdversarialHardening(unittest.TestCase):
             self.assertTrue(any("Client Environment" in n for n in field_names))
             self.assertTrue(any("Security Attestation" in n for n in field_names))
 
+    def test_html_templates_javascript_syntax(self):
+        """Validates that all inline <script> tags in dashboard.html and login.html compile without SyntaxErrors."""
+        import re
+        import subprocess
+        from pathlib import Path
+        
+        templates_dir = Path(__file__).resolve().parent.parent / "honeygrid" / "server" / "templates"
+        script_pattern = re.compile(r"<script(?:\s+[^>]*)?>(.*?)</script>", re.DOTALL | re.IGNORECASE)
+        
+        for html_file in templates_dir.glob("*.html"):
+            content = html_file.read_text(encoding="utf-8")
+            scripts = script_pattern.findall(content)
+            for idx, script in enumerate(scripts):
+                cleaned = script.strip()
+                if not cleaned:
+                    continue
+                # Replace Jinja placeholders
+                sanitized = re.sub(r"\{\{.*?\}\}", "'dummy'", cleaned)
+                try:
+                    proc = subprocess.run(
+                        ["node", "--check", "-"],
+                        input=sanitized,
+                        text=True,
+                        encoding="utf-8",
+                        capture_output=True
+                    )
+                    if proc.returncode != 0:
+                        self.fail(f"JavaScript SyntaxError in {html_file.name} (script #{idx + 1}): {proc.stderr}")
+                except FileNotFoundError:
+                    # Node not installed in minimal CI container; check for unescaped raw newlines in string literals
+                    self.assertNotIn("join('\n')", sanitized)
+
 
 if __name__ == "__main__":
     unittest.main()
+
