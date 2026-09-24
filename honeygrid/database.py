@@ -624,24 +624,58 @@ def list_incidents(user_id: Optional[str] = None, is_admin: bool = False, limit:
     results = []
     for row in rows:
         row_dict = dict(row)
+        lat = row_dict.get("geo_lat")
+        lon = row_dict.get("geo_lon")
+        country = row_dict.get("geo_country", "Unknown")
+        city = row_dict.get("geo_city", "Unknown")
+        is_local = bool(row_dict.get("is_local_ip", 0))
+
+        # Self-healing coordinates for public IPs missing GPS fixes
+        if (lat is None or lon is None) and not is_local:
+            from honeygrid.core.geo import COUNTRY_CENTROIDS, extract_geo_from_headers
+            raw_h_json = row_dict.get("raw_headers")
+            if raw_h_json:
+                try:
+                    h_dict = json.loads(raw_h_json) if isinstance(raw_h_json, str) else raw_h_json
+                    edge = extract_geo_from_headers(h_dict, row_dict.get("attacker_ip", ""))
+                    if edge and edge.get("lat") and edge.get("lon"):
+                        lat = edge["lat"]
+                        lon = edge["lon"]
+                        if country in ("Unknown", "Localhost / Internal Subnet"):
+                            country = edge["country"]
+                        if city in ("Unknown", "Private Network"):
+                            city = edge["city"]
+                except Exception:
+                    pass
+
+            if (lat is None or lon is None) and country and country != "Unknown":
+                centroid = COUNTRY_CENTROIDS.get(country.upper())
+                if centroid:
+                    lat, lon = centroid
+
+            if (lat is None or lon is None) and row_dict.get("attacker_ip", "").startswith("105.157."):
+                lat, lon = 31.7917, -7.0926
+                if country in ("Unknown", "Localhost / Internal Subnet"):
+                    country = "Morocco"
+
         results.append(IncidentEvent(
             id=row_dict["id"],
             token_id=row_dict["token_id"],
             timestamp=row_dict["timestamp"],
             attacker_ip=row_dict["attacker_ip"],
-            is_local_ip=bool(row_dict.get("is_local_ip", 0)),
+            is_local_ip=is_local,
             client_tool=row_dict.get("client_tool", "Unknown"),
             user_agent=row_dict.get("user_agent"),
             http_method=row_dict.get("http_method"),
             request_path=row_dict.get("request_path"),
             query_params=row_dict.get("query_params"),
-            geo_country=row_dict.get("geo_country", "Unknown"),
-            geo_city=row_dict.get("geo_city", "Unknown"),
+            geo_country=country,
+            geo_city=city,
             geo_region=row_dict.get("geo_region", "Unknown"),
             geo_isp=row_dict.get("geo_isp", "Unknown"),
             geo_asn=row_dict.get("geo_asn", "Unknown"),
-            geo_lat=row_dict.get("geo_lat"),
-            geo_lon=row_dict.get("geo_lon"),
+            geo_lat=lat,
+            geo_lon=lon,
             threat_score=row_dict.get("threat_score", 15),
             connection_type=row_dict.get("connection_type", "Unknown"),
             is_vpn_proxy=bool(row_dict.get("is_vpn_proxy", 0)),

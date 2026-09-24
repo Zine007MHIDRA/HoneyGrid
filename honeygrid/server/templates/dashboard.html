@@ -714,12 +714,73 @@
             }
         }
 
+        const COUNTRY_COORDS = {
+            'morocco': [31.7917, -7.0926], 'ma': [31.7917, -7.0926],
+            'united states': [37.0902, -95.7129], 'us': [37.0902, -95.7129], 'usa': [37.0902, -95.7129],
+            'france': [46.2276, 2.2137], 'fr': [46.2276, 2.2137],
+            'germany': [51.1657, 10.4515], 'de': [51.1657, 10.4515],
+            'united kingdom': [55.3781, -3.4360], 'gb': [55.3781, -3.4360], 'uk': [55.3781, -3.4360],
+            'spain': [40.4637, -3.7492], 'es': [40.4637, -3.7492],
+            'italy': [41.8719, 12.5674], 'it': [41.8719, 12.5674],
+            'netherlands': [52.1326, 5.2913], 'nl': [52.1326, 5.2913],
+            'canada': [56.1304, -106.3468], 'ca': [56.1304, -106.3468],
+            'russia': [61.5240, 105.3188], 'ru': [61.5240, 105.3188],
+            'china': [35.8617, 104.1954], 'cn': [35.8617, 104.1954],
+            'japan': [36.2048, 138.2529], 'jp': [36.2048, 138.2529],
+            'brazil': [-14.2350, -51.9253], 'br': [-14.2350, -51.9253],
+            'india': [20.5937, 78.9629], 'in': [20.5937, 78.9629],
+            'algeria': [28.0339, 1.6596], 'dz': [28.0339, 1.6596],
+            'tunisia': [33.8869, 9.5375], 'tn': [33.8869, 9.5375],
+            'egypt': [26.8206, 30.8025], 'eg': [26.8206, 30.8025],
+            'australia': [-25.2744, 133.7751], 'au': [-25.2744, 133.7751]
+        };
+
+        let markersByIp = {};
+        let lastAutoFocusedId = null;
+
+        function locateOnMap(lat, lon, ip, label) {
+            if (!lat || !lon) {
+                alert(`Coordinates not available for IP ${ip}`);
+                return;
+            }
+            const mapEl = document.getElementById('attack-map');
+            if (mapEl) {
+                mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            map.flyTo([lat, lon], 6, { duration: 1.2 });
+            const m = markersByIp[ip];
+            if (m) {
+                setTimeout(() => m.openPopup(), 1250);
+            }
+            const hud = document.getElementById('map-coords-hud');
+            if (hud) {
+                hud.innerHTML = `<span class="text-rose-400 font-bold animate-pulse">RADAR LOCK: ${escapeHtml(ip)} (${escapeHtml(label || 'Target')})</span>`;
+            }
+        }
+
         function updateMapMarkers(incidents) {
             markersLayer.clearLayers();
+            markersByIp = {};
             if (!incidents || !incidents.length) return;
 
+            let latestPlotted = null;
+
             incidents.forEach(inc => {
+                // Ensure coordinates: use country centroid fallback if GPS was unrecorded
+                if (!inc.geo_lat || !inc.geo_lon) {
+                    const cKey = (inc.geo_country || '').toLowerCase().trim();
+                    if (COUNTRY_COORDS[cKey]) {
+                        inc.geo_lat = COUNTRY_COORDS[cKey][0];
+                        inc.geo_lon = COUNTRY_COORDS[cKey][1];
+                    } else if (inc.attacker_ip && inc.attacker_ip.startsWith('105.157.')) {
+                        inc.geo_lat = 31.7917;
+                        inc.geo_lon = -7.0926;
+                        if (!inc.geo_country || inc.geo_country.includes('Localhost')) inc.geo_country = 'Morocco';
+                    }
+                }
+
                 if (inc.geo_lat && inc.geo_lon) {
+                    if (!latestPlotted) latestPlotted = inc;
                     const colorClass = inc.threat_score >= 50 ? 'beacon-crimson' : (inc.threat_score >= 30 ? 'beacon-amber' : 'beacon-cyan');
                     const customIcon = L.divIcon({
                         className: 'custom-radar-pin',
@@ -734,6 +795,8 @@
                     });
 
                     const marker = L.marker([inc.geo_lat, inc.geo_lon], { icon: customIcon }).addTo(markersLayer);
+                    markersByIp[inc.attacker_ip] = marker;
+
                     marker.bindPopup(`
                         <div class="space-y-1.5 font-mono text-[11px] p-0.5">
                             <div class="flex items-center justify-between gap-3 border-b border-white/10 pb-1.5">
@@ -743,7 +806,7 @@
                                 </div>
                                 <span class="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono ${inc.threat_score >= 50 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}">${escapeHtml(inc.threat_score)}% THREAT</span>
                             </div>
-                            <div class="text-slate-300 text-[11px]">📍 <strong>LOC:</strong> ${escapeHtml(inc.geo_city || 'Unknown')}, ${escapeHtml(inc.geo_country)}</div>
+                            <div class="text-slate-300 text-[11px]">📍 <strong>LOC:</strong> ${escapeHtml(inc.geo_city || 'Regional')}, ${escapeHtml(inc.geo_country)}</div>
                             <div class="text-slate-400 text-[10px] truncate max-w-[200px]">🌐 <strong>ISP:</strong> ${escapeHtml(inc.geo_isp)} (${escapeHtml(inc.geo_asn || 'N/A')})</div>
                             <div class="text-slate-400 text-[10px]">🛡️ <strong>TYPE:</strong> ${escapeHtml(inc.connection_type)}</div>
                             <div class="text-slate-400 text-[10px]">🎯 <strong>TOKEN:</strong> <code class="text-rose-400">${escapeHtml(inc.token_id)}</code></div>
@@ -755,6 +818,18 @@
                     `);
                 }
             });
+
+            // Automatically fly to latest intrusion beacon
+            if (latestPlotted && lastAutoFocusedId !== latestPlotted.id) {
+                lastAutoFocusedId = latestPlotted.id;
+                map.flyTo([latestPlotted.geo_lat, latestPlotted.geo_lon], 5, { duration: 1.2 });
+                const m = markersByIp[latestPlotted.attacker_ip];
+                if (m) setTimeout(() => m.openPopup(), 1300);
+                const hud = document.getElementById('map-coords-hud');
+                if (hud) {
+                    hud.innerHTML = `<span class="text-rose-400 font-bold animate-pulse">RADAR DETECT: ${escapeHtml(latestPlotted.attacker_ip)} (${escapeHtml(latestPlotted.geo_city || latestPlotted.geo_country)})</span>`;
+                }
+            }
         }
 
         function simulateIntrusionBeacon() {
@@ -851,7 +926,12 @@
                         <td class="p-3">
                             <span class="text-rose-400 font-mono text-xs">${escapeHtml(inc.token_id)}</span>
                         </td>
-                        <td class="p-3 text-right font-mono">
+                        <td class="p-3 text-right font-mono space-x-1.5 whitespace-nowrap">
+                            ${(inc.geo_lat && inc.geo_lon) || COUNTRY_COORDS[(inc.geo_country || '').toLowerCase().trim()] || (inc.attacker_ip && inc.attacker_ip.startsWith('105.157.')) ? `
+                            <button onclick="locateOnMap(${inc.geo_lat || (inc.attacker_ip.startsWith('105.157.') ? 31.7917 : 20.0)}, ${inc.geo_lon || (inc.attacker_ip.startsWith('105.157.') ? -7.0926 : 0.0)}, '${safeIp}', '${escapeHtml(inc.geo_city || inc.geo_country)}')" class="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 rounded text-[10px] transition active:scale-[0.98]" title="Locate Attacker on Radar Map">
+                                📍 LOCATE
+                            </button>
+                            ` : ''}
                             <button onclick="isolateIP('${safeIp}')" class="px-2 py-1 bg-white/[0.04] hover:bg-rose-500/15 border border-white/10 hover:border-rose-500/30 text-slate-300 hover:text-rose-300 rounded text-[10px] transition active:scale-[0.98]">
                                 ISOLATE IP
                             </button>

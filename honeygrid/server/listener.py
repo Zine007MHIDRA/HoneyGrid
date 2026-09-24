@@ -160,7 +160,7 @@ def process_incident_async(
     """
     try:
         try:
-            geo = lookup_ip_geolocation(raw_ip)
+            geo = lookup_ip_geolocation(raw_ip, headers=headers_dict)
         except Exception as ge:
             print(f"[!] GeoIP lookup failed: {ge}")
             geo = {"ip": raw_ip, "country": "Unknown", "city": "Unknown", "region": "Unknown", "isp": "Unknown", "asn": "Unknown"}
@@ -323,14 +323,14 @@ async def api_register(data: UserRegister, request: Request, background_tasks: B
     user_agent = headers_dict.get("user-agent", "")
     client_tool = identify_client_tool(user_agent)
 
-    def _async_notify_signup(u: User, ip: str, ua: str, tool: str):
+    def _async_notify_signup(u: User, ip: str, ua: str, tool: str, hd: dict):
         try:
-            geo = lookup_ip_geolocation(ip)
+            geo = lookup_ip_geolocation(ip, headers=hd)
         except Exception:
             geo = {}
         send_discord_signup_alert(user=u, client_ip=ip, user_agent=ua, client_tool=tool, geo_data=geo)
 
-    background_tasks.add_task(_async_notify_signup, user, client_ip, user_agent, client_tool)
+    background_tasks.add_task(_async_notify_signup, user, client_ip, user_agent, client_tool, headers_dict)
     
     resp = JSONResponse({
         "status": "success",
