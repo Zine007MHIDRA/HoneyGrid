@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from honeygrid.config import settings
 from honeygrid.database import (
     init_db, get_token, record_incident, list_tokens, list_incidents,
+    get_incident, list_incidents_by_ip,
     get_dashboard_stats, update_incident_telemetry,
     create_user, get_user_by_email, get_user_auth_record_by_email, get_user_by_id,
     create_session, get_user_by_session, delete_session,
@@ -115,6 +116,14 @@ async def get_brand_logo():
     if logo_file.exists():
         return FileResponse(str(logo_file), media_type="image/jpeg")
     return Response(status_code=404)
+
+@app.get("/ui/theme.css")
+async def get_theme_stylesheet():
+    """Shared design tokens, served through a route (not /static) so it resolves on Vercel."""
+    css = get_template("theme.css")
+    if not css:
+        return Response(status_code=404)
+    return Response(content=css, media_type="text/css", headers={"Cache-Control": "public, max-age=300"})
 
 def get_template(name: str) -> str:
     candidate_paths = [
@@ -231,12 +240,15 @@ def process_incident_async(
 @app.get("/api/index", response_class=HTMLResponse)
 @app.get("/index.py", response_class=HTMLResponse)
 async def index_root(request: Request):
-    """Directs web users to the dashboard if authenticated, otherwise to the login portal."""
+    """Sends signed-in operators to the dashboard; everyone else browsing gets the product landing page."""
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
         user = get_current_user(request)
         if user:
             return RedirectResponse(url="/dashboard", status_code=302)
+        html = get_template("landing.html")
+        if html:
+            return HTMLResponse(html)
         return RedirectResponse(url="/login", status_code=302)
     return JSONResponse({"service": "HoneyGrid Sentinel SOC", "status": "active", "version": "2.0.0"})
 
@@ -506,12 +518,55 @@ async def api_stats(request: Request):
     return get_dashboard_stats(user_id=user.id, is_admin=user.is_admin)
 
 @app.get("/api/incidents")
-async def api_incidents(request: Request, limit: int = 50):
+async def api_incidents(request: Request, limit: int = 50, q: Optional[str] = None, min_score: Optional[int] = None):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    incidents = list_incidents(user_id=user.id, is_admin=user.is_admin, limit=limit)
+    limit = max(1, min(limit, 500))
+    incidents = list_incidents(user_id=user.id, is_admin=user.is_admin, limit=limit, q=q, min_score=min_score)
     return [i.model_dump() for i in incidents]
+
+def build_threat_signals(incident: IncidentEvent, safelisted: bool) -> list:
+    """Explains the threat score from the flags threat_intel already stored on the incident."""
+    tool = incident.client_tool or "Unknown"
+    is_browser = any(k in tool for k in ("Browser", "Firefox", "Safari"))
+    return [
+        {"key": "tor", "label": "Tor exit node", "active": bool(incident.is_tor)},
+        {"key": "vpn", "label": "VPN / anonymizing proxy", "active": bool(incident.is_vpn_proxy)},
+        {"key": "datacenter", "label": "Cloud datacenter / VPS range",
+         "active": "datacenter" in (incident.connection_type or "").lower()},
+        {"key": "scripted", "label": "Automated tooling" if is_browser else f"Automated tooling ({tool})", "active": not is_browser},
+        {"key": "browser_probe", "label": "Browser hardware probe captured", "active": bool(incident.gpu_renderer or incident.screen_res)},
+        {"key": "safelisted", "label": "Operator safe list", "active": safelisted},
+    ]
+
+@app.get("/api/incidents/{incident_id}")
+async def api_incident_detail(request: Request, incident_id: int):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    incident = get_incident(incident_id, user_id=user.id, is_admin=user.is_admin)
+    if not incident:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    timeline = list_incidents_by_ip(incident.attacker_ip, user_id=user.id, is_admin=user.is_admin)
+    safelisted = is_safe_ip(incident.attacker_ip)
+    tokens_touched = list(dict.fromkeys(i.token_id for i in timeline))
+    return {
+        "incident": incident.model_dump(),
+        "timeline": [
+            {"id": i.id, "timestamp": i.timestamp, "token_id": i.token_id, "threat_score": i.threat_score,
+             "client_tool": i.client_tool, "http_method": i.http_method, "request_path": i.request_path}
+            for i in timeline
+        ],
+        "summary": {
+            "first_seen": timeline[0].timestamp if timeline else incident.timestamp,
+            "last_seen": timeline[-1].timestamp if timeline else incident.timestamp,
+            "hit_count": len(timeline),
+            "tokens_touched": tokens_touched,
+            "is_safelisted": safelisted,
+        },
+        "signals": build_threat_signals(incident, safelisted),
+    }
 
 @app.get("/api/audit-logs")
 async def api_get_audit_logs(request: Request, limit: int = 50, action: Optional[str] = None):
@@ -675,10 +730,12 @@ async def trigger_canary(
 @app.post("/t/{token_id}/telemetry")
 async def receive_browser_telemetry(
     token_id: str,
-    telemetry: BrowserTelemetry
+    telemetry: BrowserTelemetry,
+    request: Request
 ):
     """Silent collector endpoint for client-side GPU, screen, and WebRTC LAN leaks."""
-    update_incident_telemetry(token_id, telemetry)
+    client_ip, is_local = extract_client_ip(request)
+    update_incident_telemetry(token_id, telemetry, client_ip=client_ip, is_local=is_local)
     return {"status": "received"}
 
 @app.api_route("/api/v1/auth/{path:path}", methods=["GET", "POST"])

@@ -1,0 +1,201 @@
+/* HoneyGrid Sentinel · shared design tokens and primitives (served at /ui/theme.css) */
+
+:root {
+  --font-sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Line colors: threat is the only thing allowed to carry color */
+  --line-red: #DA291C;      --on-red: #FFFFFF;
+  --line-orange: #FF6319;   --on-orange: #111214;
+  --line-yellow: #FCCC0A;   --on-yellow: #111214;
+  --line-green: #00843D;    --on-green: #FFFFFF;
+  --line-grey: #A7A9AC;     --on-grey: #111214;
+
+  /* The sign band is black enamel in every theme */
+  --band: #0B0B0C;
+  --band-ink: #F4F4F1;
+  --band-muted: #9C9EA2;
+  --band-rule: #34363A;
+
+  --radius: 2px;
+  --rule-w: 2px;
+
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px; --space-9: 96px;
+
+  --text-xs: 12px; --text-sm: 13px; --text-base: 14px; --text-md: 16px;
+  --text-lg: 20px; --text-xl: 28px; --text-2xl: 40px; --text-3xl: 64px; --text-4xl: 96px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-med: 280ms;
+  --dur-slow: 520ms;
+
+  /* Night (default): the analyst's dim room */
+  --ground: #0F1012;
+  --surface: #17181B;
+  --surface-2: #1E2023;
+  --rule: #2A2C30;
+  --rule-strong: #3A3C41;
+  --ink: #F4F4F1;
+  --ink-2: #C9CACC;
+  --muted: #A3A5A8;
+  --faint: #6E7074;
+  --ghost: #34363A;
+  --focus: #FCCC0A;
+  --shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --scrim: rgba(6, 6, 7, 0.62);
+  color-scheme: dark;
+}
+
+/* Daylight: reviewers, office light */
+:root[data-theme="light"] {
+  --ground: #F4F4F1;
+  --surface: #FFFFFF;
+  --surface-2: #ECECE8;
+  --rule: #D6D6D1;
+  --rule-strong: #B9B9B3;
+  --ink: #111214;
+  --ink-2: #2E3033;
+  --muted: #5A5C60;
+  --faint: #7C7E82;
+  --ghost: #D9D9D4;
+  --focus: #111214;
+  --shadow: 0 16px 40px -14px rgba(17, 18, 20, 0.28), 0 2px 6px rgba(17, 18, 20, 0.08);
+  --scrim: rgba(17, 18, 20, 0.38);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #F4F4F1;
+    --surface: #FFFFFF;
+    --surface-2: #ECECE8;
+    --rule: #D6D6D1;
+    --rule-strong: #B9B9B3;
+    --ink: #111214;
+    --ink-2: #2E3033;
+    --muted: #5A5C60;
+    --faint: #7C7E82;
+    --ghost: #D9D9D4;
+    --focus: #111214;
+    --shadow: 0 16px 40px -14px rgba(17, 18, 20, 0.28), 0 2px 6px rgba(17, 18, 20, 0.08);
+    --scrim: rgba(17, 18, 20, 0.38);
+    color-scheme: light;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -0.015em; line-height: 1.1; text-wrap: balance; }
+p { margin: 0; }
+a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+code, .mono { font-family: var(--font-mono); font-size: 0.92em; letter-spacing: 0; }
+::selection { background: var(--line-yellow); color: #111214; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.band :focus-visible { outline-color: var(--line-yellow); }
+
+* { scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--rule-strong); border: 3px solid var(--ground); border-radius: 0; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- Sign band ---------- */
+.band {
+  background: var(--band);
+  color: var(--band-ink);
+  box-shadow: inset 0 3px 0 var(--band), inset 0 5px 0 var(--band-ink);
+  border-bottom: 4px solid var(--band-rule);
+}
+.band-inner { display: flex; align-items: center; gap: var(--space-4); min-height: 60px; padding: 5px var(--space-5) 0; }
+.wordmark { display: inline-flex; align-items: center; gap: var(--space-3); text-decoration: none; color: var(--band-ink); }
+.wordmark img { width: 32px; height: 32px; object-fit: cover; border-radius: var(--radius); }
+.wordmark b { font-weight: 800; font-size: 21px; letter-spacing: -0.02em; }
+.wordmark span { color: var(--band-muted); font-weight: 500; font-size: 21px; letter-spacing: -0.02em; }
+.band .btn { flex: none; }
+@media (max-width: 600px) {
+  .wordmark img { width: 28px; height: 28px; }
+  .wordmark b, .wordmark span { font-size: 18px; }
+  .band .btn { min-width: 36px; }
+}
+
+/* ---------- Line bullets ---------- */
+.bullet {
+  --b: 30px;
+  display: inline-grid; place-items: center; flex: none;
+  width: var(--b); height: var(--b); border-radius: 50%;
+  font-weight: 800; font-size: calc(var(--b) * 0.42); line-height: 1; letter-spacing: -0.02em;
+  background: var(--line-grey); color: var(--on-grey);
+  font-variant-numeric: tabular-nums;
+}
+.bullet.sm { --b: 22px; }
+.bullet.lg { --b: 44px; }
+.bullet.xl { --b: 64px; }
+.bullet.red { background: var(--line-red); color: var(--on-red); }
+.bullet.orange { background: var(--line-orange); color: var(--on-orange); }
+.bullet.yellow { background: var(--line-yellow); color: var(--on-yellow); }
+.bullet.green { background: var(--line-green); color: var(--on-green); }
+.bullet.grey { background: var(--line-grey); color: var(--on-grey); }
+.bullet.ghost { background: transparent; color: var(--faint); box-shadow: inset 0 0 0 2px var(--ghost); }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  height: 36px; padding: 0 var(--space-4);
+  border: var(--rule-w) solid var(--rule-strong); border-radius: var(--radius);
+  background: transparent; color: var(--ink);
+  font-weight: 600; font-size: var(--text-sm); letter-spacing: 0.005em; white-space: nowrap;
+  cursor: pointer; text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.btn:hover { background: var(--surface-2); border-color: var(--ink-2); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn.primary { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+.btn.primary:hover { background: var(--ink-2); border-color: var(--ink-2); }
+.btn.danger { border-color: var(--line-red); color: var(--ink); }
+.btn.danger:hover { background: var(--line-red); color: var(--on-red); }
+.btn.quiet { border-color: transparent; }
+.btn.quiet:hover { border-color: var(--rule-strong); }
+.btn.sm { height: 30px; padding: 0 var(--space-3); font-size: var(--text-xs); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+
+.band .btn { color: var(--band-ink); border-color: var(--band-rule); }
+.band .btn:hover { background: #1B1C1F; border-color: var(--band-muted); }
+.band .btn.primary { background: var(--band-ink); color: var(--band); border-color: var(--band-ink); }
+.band .btn.primary:hover { background: #FFFFFF; }
+
+/* ---------- Fields ---------- */
+.field { display: grid; gap: var(--space-2); }
+.label { font-size: var(--text-xs); font-weight: 600; color: var(--muted); letter-spacing: 0.01em; }
+.input, .select {
+  width: 100%; height: 40px; padding: 0 var(--space-3);
+  background: var(--ground); color: var(--ink);
+  border: var(--rule-w) solid var(--rule); border-radius: var(--radius);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.input::placeholder { color: var(--faint); }
+.input:hover, .select:hover { border-color: var(--rule-strong); }
+.input:focus, .select:focus { outline: none; border-color: var(--ink); }
+.input[aria-invalid="true"] { border-color: var(--line-red); }
+
+/* ---------- Icons (authored, 1.75 stroke) ---------- */
+.icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: square; stroke-linejoin: miter; }
+
+/* ---------- Motion safety ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}

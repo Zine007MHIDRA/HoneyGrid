@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HoneyGrid Sentinel · Deception that identifies intruders on arrival</title>
+    <meta name="description" content="HoneyGrid Sentinel plants decoy credentials, files and links. Anything that touches one is hostile by definition, and arrives already identified." />
+    <link rel="icon" href="/api/logo" />
+    <script>try { var t = localStorage.getItem('hg-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/ui/theme.css" />
+    <style>
+        .wrap { --gutter: var(--space-5); max-width: 1280px; margin: 0 auto; padding: 0 var(--gutter); }
+        .band nav { display: flex; gap: var(--space-5); margin-left: var(--space-5); }
+        .band nav a { color: var(--band-muted); text-decoration: none; font-weight: 500; font-size: var(--text-sm); }
+        .band nav a:hover { color: var(--band-ink); }
+        .band .spacer { flex: 1; }
+        .band-inner.wrap { padding-top: 5px; }
+        .theme-btn { width: 36px; padding: 0; }
+
+        /* Hero */
+        .hero { padding: var(--space-9) 0 var(--space-8); border-bottom: var(--rule-w) solid var(--rule); }
+        .hero h1 {
+            font-size: clamp(44px, 7vw, 96px);
+            font-weight: 800; font-stretch: 92%;
+            letter-spacing: -0.035em; line-height: 0.95;
+        }
+        .hero .lede { margin-top: var(--space-6); max-width: 60ch; font-size: var(--text-lg); line-height: 1.45; color: var(--ink-2); }
+        .hero .actions { margin-top: var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-3); }
+        .hero .actions .btn { height: 44px; padding: 0 var(--space-5); font-size: var(--text-base); }
+
+        /* Route line: the signature */
+        .route { position: relative; margin-top: var(--space-8); padding-top: 22px; }
+        .route-track { position: absolute; left: 11px; right: 11px; top: 33px; height: 6px; background: var(--ink); }
+        .route-stops { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); list-style: none; margin: 0; padding: 0; }
+        .stop { position: relative; }
+        .stop-dot { width: 22px; height: 22px; border-radius: 50%; background: var(--ground); border: 5px solid var(--ink); position: relative; z-index: 1; }
+        .stop h2 { margin-top: var(--space-4); font-size: var(--text-xl); font-weight: 800; letter-spacing: -0.02em; }
+        .stop p { margin-top: var(--space-2); color: var(--muted); max-width: 30ch; }
+        .stop:last-child { text-align: right; }
+        .stop:last-child .stop-dot { margin-left: auto; }
+        .stop:last-child p { margin-left: auto; }
+        .rider { position: absolute; top: 14px; left: 0; z-index: 2; will-change: transform; }
+        .rider .bullet { --b: 40px; box-shadow: 0 0 0 4px var(--ground); }
+
+        /* The journey: the hero route turns and runs down the left gutter; every section is a station */
+        .leg-inner { position: relative; display: grid; grid-template-columns: 180px minmax(0, 1fr); padding-top: var(--space-9); padding-bottom: var(--space-9); }
+        .leg-inner::before { content: ""; position: absolute; left: calc(var(--gutter) + 8px); top: 0; bottom: 0; width: 6px; background: var(--ink); }
+        .leg-dot { position: absolute; left: var(--gutter); top: calc(var(--space-9) + 10px); width: 22px; height: 22px; border-radius: 50%; background: var(--ground); border: 5px solid var(--ink); z-index: 1; }
+        .leg-name { position: absolute; left: calc(var(--gutter) + 40px); top: calc(var(--space-9) + 6px); font-size: var(--text-lg); font-weight: 800; letter-spacing: -0.01em; }
+        .leg.terminus .leg-dot { background: var(--line-red); border-color: var(--line-red); width: 30px; height: 30px; left: calc(var(--gutter) - 4px); top: calc(var(--space-9) + 6px); }
+        .leg.terminus .leg-inner::before { bottom: auto; height: calc(var(--space-9) + 20px); }
+        .leg-body { grid-column: 2; min-width: 0; }
+        .leg-body > h2 { font-size: clamp(32px, 4.4vw, 56px); font-weight: 800; letter-spacing: -0.03em; line-height: 1; max-width: 18ch; }
+        .deck { margin-top: var(--space-4); margin-bottom: var(--space-7); color: var(--ink-2); font-size: var(--text-md); max-width: 60ch; }
+        .leg-body > h2.statement { font-size: clamp(40px, 6.2vw, 84px); letter-spacing: -0.035em; line-height: 0.96; max-width: 13ch; }
+        .prose { margin-top: var(--space-6); font-size: var(--text-lg); line-height: 1.5; color: var(--ink-2); max-width: 62ch; }
+        .prose b { color: var(--ink); }
+        .sub-head { margin-top: var(--space-8); margin-bottom: var(--space-4); font-size: var(--text-xl); font-weight: 800; letter-spacing: -0.02em; }
+
+        /* Station index (decoy types) */
+        .stations { list-style: none; margin: 0; padding: 0; position: relative; }
+        .stations::before { content: ""; position: absolute; left: 13px; top: 20px; bottom: 20px; width: 6px; background: var(--line-red); }
+        .station { position: relative; display: grid; grid-template-columns: 32px 22ch 1fr; gap: var(--space-5); align-items: baseline; padding: var(--space-4) 0; border-bottom: 1px solid var(--rule); }
+        .station:last-child { border-bottom: 0; }
+        .station i { width: 32px; height: 32px; border-radius: 50%; background: var(--ground); border: 6px solid var(--line-red); align-self: center; position: relative; z-index: 1; }
+        .station b { font-size: var(--text-lg); font-weight: 700; letter-spacing: -0.01em; }
+        .station span { color: var(--muted); }
+        .station code { color: var(--ink-2); }
+
+        /* Proof: synthetic console */
+        .demo { display: grid; grid-template-columns: 7fr 5fr; border: var(--rule-w) solid var(--ink); background: var(--surface); box-shadow: var(--shadow); }
+        .demo-board { border-right: var(--rule-w) solid var(--rule); min-width: 0; }
+        .demo-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); background: var(--band); color: var(--band-ink); font-weight: 700; font-size: var(--text-sm); }
+        .demo-bar em { font-style: normal; font-weight: 500; color: var(--band-muted); font-size: var(--text-xs); }
+        .dep { display: grid; grid-template-columns: 30px minmax(0, 1.1fr) minmax(0, 1.3fr) 56px; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--rule); }
+        .dep:last-child { border-bottom: 0; }
+        .dep.active { background: var(--surface-2); }
+        .dep .ip { font-family: var(--font-mono); font-weight: 600; font-size: var(--text-sm); }
+        .dep .sub { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dep .to { font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dep .to .arrow { color: var(--faint); margin: 0 6px; }
+        .dep time { font-family: var(--font-mono); color: var(--muted); font-size: var(--text-xs); text-align: right; }
+        .demo-drawer { padding: var(--space-5); min-width: 0; }
+        .dd-head { display: flex; align-items: center; gap: var(--space-4); }
+        .dd-head .ip { font-family: var(--font-mono); font-weight: 600; font-size: var(--text-lg); }
+        .dd-head .sub { color: var(--muted); font-size: var(--text-sm); }
+        .dd-line { position: relative; list-style: none; margin: var(--space-5) 0 0; padding: 0 0 0 44px; }
+        .dd-line::before { content: ""; position: absolute; left: 13px; top: 12px; bottom: 12px; width: 6px; background: var(--line-red); }
+        .dd-line li { position: relative; padding: var(--space-2) 0 var(--space-3); }
+        .dd-line li::before { content: ""; position: absolute; left: -38px; top: 10px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); border: 5px solid var(--line-red); }
+        .dd-line li.xfer::before { border-color: var(--ink); }
+        .dd-line .n { position: absolute; left: -64px; top: 10px; width: 18px; text-align: right; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--faint); }
+        .dd-line b { font-weight: 700; }
+        .dd-line span { display: block; color: var(--muted); font-size: var(--text-xs); font-family: var(--font-mono); }
+        .synthetic { margin-top: var(--space-3); color: var(--faint); font-size: var(--text-xs); }
+
+        /* Telemetry spec */
+        .spec { display: grid; grid-template-columns: repeat(4, 1fr); border-top: var(--rule-w) solid var(--ink); }
+        .spec > div { padding: var(--space-5) var(--space-5) var(--space-2) 0; }
+        .spec > div + div { padding-left: var(--space-5); border-left: 1px solid var(--rule); }
+        .spec h3 { font-size: var(--text-lg); font-weight: 800; }
+        .spec ul { list-style: none; margin: var(--space-3) 0 0; padding: 0; }
+        .spec li { padding: 6px 0; border-bottom: 1px solid var(--rule); color: var(--ink-2); }
+        .spec li:last-child { border-bottom: 0; }
+
+        /* Containment: departure rows, not a card trio */
+        .rows { list-style: none; margin: 0; padding: 0; border-top: var(--rule-w) solid var(--ink); }
+        .rows li { display: grid; grid-template-columns: 48px 24ch minmax(0, 1fr); gap: var(--space-5); align-items: center; padding: var(--space-5) 0; border-bottom: 1px solid var(--rule); }
+        .rows .bullet { --b: 40px; font-size: 17px; }
+        .rows b { font-size: var(--text-lg); font-weight: 700; letter-spacing: -0.01em; }
+        .rows p { color: var(--muted); max-width: 60ch; }
+
+        /* Close */
+        .closer { background: var(--band); color: var(--band-ink); padding: var(--space-9) 0; }
+        .closer h2 { font-size: clamp(40px, 6.4vw, 80px); font-weight: 800; letter-spacing: -0.035em; line-height: 0.98; max-width: 14ch; }
+        .closer p { margin-top: var(--space-5); color: var(--band-muted); font-size: var(--text-md); max-width: 52ch; }
+        .closer .actions { margin-top: var(--space-6); display: flex; gap: var(--space-3); flex-wrap: wrap; }
+        .closer .btn { height: 44px; padding: 0 var(--space-5); font-size: var(--text-base); color: var(--band-ink); border-color: var(--band-rule); }
+        .closer .btn.primary { background: var(--band-ink); color: var(--band); border-color: var(--band-ink); }
+        footer.foot { background: var(--band); color: var(--band-muted); border-top: 1px solid var(--band-rule); font-size: var(--text-xs); }
+        footer.foot .wrap { display: flex; justify-content: space-between; gap: var(--space-4); padding-top: var(--space-5); padding-bottom: var(--space-5); flex-wrap: wrap; }
+        footer.foot a { color: var(--band-ink); }
+
+        @media (max-width: 960px) {
+            .band nav { display: none; }
+            .leg-inner { grid-template-columns: 120px minmax(0, 1fr); }
+            .demo { grid-template-columns: 1fr; }
+            .demo-board { border-right: 0; border-bottom: var(--rule-w) solid var(--rule); }
+            .spec { grid-template-columns: repeat(2, 1fr); }
+            .spec > div:nth-child(3) { padding-left: 0; border-left: 0; }
+        }
+        @media (max-width: 720px) {
+            .wrap { --gutter: var(--space-4); }
+            .band-inner { padding-left: var(--space-4); padding-right: var(--space-4); }
+            .band .gh-link { display: none; }
+            .wordmark span, .theme-btn { display: none; }
+            .br-lg { display: none; }
+            .hero { padding: var(--space-7) 0 var(--space-7); }
+            .hero .lede { font-size: var(--text-md); }
+            .route { padding-top: 0; padding-left: 0; }
+            .route-track { left: 8px; right: auto; top: 11px; bottom: 11px; width: 6px; height: auto; }
+            .route-stops { grid-template-columns: 1fr; gap: var(--space-5); }
+            .stop, .stop:last-child { text-align: left; padding-left: 44px; }
+            .stop-dot, .stop:last-child .stop-dot { position: absolute; left: 0; top: 4px; margin: 0; }
+            .stop h2 { margin-top: 0; font-size: var(--text-lg); }
+            .stop:last-child p { margin-left: 0; }
+            .rider { left: -9px; top: 0; }
+            .leg-inner { grid-template-columns: 1fr; padding-top: var(--space-8); padding-bottom: var(--space-8); }
+            .leg-dot { top: calc(var(--space-8) + 4px); }
+            .leg.terminus .leg-dot { top: var(--space-8); }
+            .leg.terminus .leg-inner::before { height: calc(var(--space-8) + 14px); }
+            .leg-name { display: none; }
+            .leg-body { grid-column: 1; padding-left: 40px; padding-top: 0; }
+            .prose { font-size: var(--text-md); }
+            .rows li { grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-3) var(--space-4); }
+            .rows li p { grid-column: 2; }
+            .station { grid-template-columns: 32px 1fr; }
+            .station span { grid-column: 2; }
+            .dep { grid-template-columns: 30px minmax(0, 1fr) 48px; }
+            .dep .to { display: none; }
+            .spec { grid-template-columns: 1fr; }
+            .spec > div + div { padding-left: 0; border-left: 0; }
+        }
+    </style>
+</head>
+<body>
+    <header class="band">
+        <div class="band-inner wrap">
+            <a class="wordmark" href="/" aria-label="HoneyGrid Sentinel home">
+                <img src="/api/logo" alt="" />
+                <b>HoneyGrid</b><span>Sentinel</span>
+            </a>
+            <nav aria-label="Sections">
+                <a href="#how">How it works</a>
+                <a href="#decoys">Decoys</a>
+                <a href="#console">Console</a>
+                <a href="#contain">Containment</a>
+            </nav>
+            <div class="spacer"></div>
+            <button class="btn theme-btn" type="button" id="theme-toggle" aria-label="Switch color theme">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <a class="btn gh-link" href="https://github.com/Zine007MHIDRA/HoneyGrid" rel="noopener">Source</a>
+            <a class="btn primary" href="/login">Open console</a>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero" id="how">
+            <div class="wrap">
+                <h1>Every intruder takes<br class="br-lg" /> the same line.</h1>
+                <p class="lede">HoneyGrid Sentinel plants decoys: fake cloud keys, secret files, password vaults and links that nothing legitimate should ever touch. When something does, it arrives already identified by address, origin, device, tooling and risk, and you contain it in one decision.</p>
+                <div class="actions">
+                    <a class="btn primary" href="/login">Open the console</a>
+                    <a class="btn" href="https://github.com/Zine007MHIDRA/HoneyGrid" rel="noopener">Read the source on GitHub</a>
+                </div>
+
+                <div class="route" aria-label="How an incident travels">
+                    <div class="route-track" aria-hidden="true"></div>
+                    <div class="rider" id="rider" aria-hidden="true"><span class="bullet red">95</span></div>
+                    <ol class="route-stops">
+                        <li class="stop"><div class="stop-dot"></div><h2>Plant</h2><p>Generate a decoy and leave it where an intruder would look.</p></li>
+                        <li class="stop"><div class="stop-dot"></div><h2>Trip</h2><p>Someone opens the file, tries the key, or follows the link.</p></li>
+                        <li class="stop"><div class="stop-dot"></div><h2>Identify</h2><p>Network, place, device and tooling are captured and scored 0–100.</p></li>
+                        <li class="stop"><div class="stop-dot"></div><h2>Contain</h2><p>Alert the team, isolate the address, or safelist your own tests.</p></li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <div class="journey">
+        <section class="leg" id="decoys" aria-labelledby="leg-plant">
+            <div class="wrap leg-inner">
+                <span class="leg-dot" aria-hidden="true"></span><span class="leg-name" aria-hidden="true">Plant</span>
+                <div class="leg-body">
+                    <h2 id="leg-plant">Six decoys, one line.</h2>
+                    <p class="deck">Each decoy is generated in the console and carries its own tripwire. Plant them where an attacker goes looking for secrets.</p>
+                <ol class="stations">
+                    <li class="station"><i></i><b>Canary URL</b><span>Links in wikis, tickets and internal docs that record whoever follows them.</span></li>
+                    <li class="station"><i></i><b>PDF beacon</b><span>A document that reports back when it is opened in a reader.</span></li>
+                    <li class="station"><i></i><b>AWS IAM keys</b><span>A convincing <code>~/.aws/credentials</code> file for infostealers and insiders.</span></li>
+                    <li class="station"><i></i><b>.env secrets</b><span>Database and API credentials dropped into projects and backups.</span></li>
+                    <li class="station"><i></i><b>Git repository</b><span>A decoy repo whose remote trips on <code>git fetch</code> or <code>git pull</code>.</span></li>
+                    <li class="station"><i></i><b>KeePass vault</b><span>A <code>passwords.kdbx</code> on a desktop or share that alerts when inspected.</span></li>
+                </ol>
+                </div>
+            </div>
+        </section>
+
+        <section class="leg" aria-labelledby="leg-trip">
+            <div class="wrap leg-inner">
+                <span class="leg-dot" aria-hidden="true"></span><span class="leg-name" aria-hidden="true">Trip</span>
+                <div class="leg-body">
+                    <h2 id="leg-trip" class="statement">Nothing legitimate touches a decoy.</h2>
+                    <p class="prose">Detection that watches real traffic has to guess what is malicious. A decoy has no legitimate users, so <b>there is no baseline to tune</b> and no threshold to calibrate: the moment one is opened, tried or followed, the trip itself is the signal. It arrives <b>identified</b>, and <b>containment sits beside the evidence</b> that justifies it.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="leg" id="console" aria-labelledby="leg-identify">
+            <div class="wrap leg-inner">
+                <span class="leg-dot" aria-hidden="true"></span><span class="leg-name" aria-hidden="true">Identify</span>
+                <div class="leg-body">
+                    <h2 id="leg-identify">Follow one attacker's line.</h2>
+                    <p class="deck">The console lists every trip like a departures board. Open one and its whole history reads as a single line: each hit a numbered stop, each decoy it touched a transfer.</p>
+                <div class="demo" aria-label="Console excerpt with synthetic data">
+                    <div class="demo-board">
+                        <div class="demo-bar">Incidents <em>live · updates every 10s</em></div>
+                        <div class="dep active"><span class="bullet red">95</span><div><div class="ip">203.0.113.42</div><div class="sub">Tor exit · Frankfurt, DE</div></div><div class="to">cURL CLI<span class="arrow">→</span>aws-prod-keys</div><time>02:14</time></div>
+                        <div class="dep"><span class="bullet orange">65</span><div><div class="ip">198.51.100.7</div><div class="sub">Commercial VPN · Amsterdam, NL</div></div><div class="to">Chrome<span class="arrow">→</span>payroll-q4.pdf</div><time>01:52</time></div>
+                        <div class="dep"><span class="bullet yellow">50</span><div><div class="ip">192.0.2.180</div><div class="sub">Datacenter · Ashburn, US</div></div><div class="to">Go-http-client<span class="arrow">→</span>.env decoy</div><time>01:31</time></div>
+                        <div class="dep"><span class="bullet green">15</span><div><div class="ip">203.0.113.9</div><div class="sub">Residential ISP · Lyon, FR</div></div><div class="to">Firefox<span class="arrow">→</span>wiki canary</div><time>00:48</time></div>
+                        <div class="dep"><span class="bullet grey">0</span><div><div class="ip">198.51.100.200</div><div class="sub">Safe list · operator test</div></div><div class="to">Chrome<span class="arrow">→</span>wiki canary</div><time>00:12</time></div>
+                    </div>
+                    <div class="demo-drawer">
+                        <div class="dd-head"><span class="bullet lg red">95</span><div><div class="ip">203.0.113.42</div><div class="sub">Tor exit node · T1552 Unsecured Credentials</div></div></div>
+                        <ol class="dd-line">
+                            <li><span class="n">1</span><b>aws-prod-keys</b><span>01:58 · GET · cURL CLI</span></li>
+                            <li class="xfer"><span class="n">2</span><b>Transfer: .env decoy</b><span>02:03 · GET · python-requests</span></li>
+                            <li><span class="n">3</span><b>aws-prod-keys</b><span>02:14 · POST · cURL CLI</span></li>
+                        </ol>
+                    </div>
+                </div>
+                <p class="synthetic">Synthetic demonstration data. Addresses are from reserved documentation ranges.</p>
+                    <h3 class="sub-head">What every hit carries</h3>
+                    <p class="deck" style="margin-bottom:var(--space-5)">Location comes from the hosting edge first, with fallbacks through several geolocation services down to a country centroid. When a browser opens the trap, a silent probe adds hardware detail.</p>
+                <div class="spec">
+                    <div><h3>Network</h3><ul><li>Client IP behind trusted proxies</li><li>ISP and ASN</li><li>Tor exit, VPN, datacenter</li><li>Threat score 0–100</li></ul></div>
+                    <div><h3>Place</h3><ul><li>City, region, country</li><li>Coordinates from edge headers</li><li>Plotted on the attack map</li></ul></div>
+                    <div><h3>Device</h3><ul><li>GPU renderer</li><li>Screen, cores, memory</li><li>LAN address via WebRTC</li><li>Timezone and platform</li></ul></div>
+                    <div><h3>Intent</h3><ul><li>Client tool from user agent</li><li>Method, path, headers</li><li>MITRE ATT&amp;CK technique</li></ul></div>
+                </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="leg terminus" id="contain" aria-labelledby="leg-contain">
+            <div class="wrap leg-inner">
+                <span class="leg-dot" aria-hidden="true"></span><span class="leg-name" aria-hidden="true">Contain</span>
+                <div class="leg-body">
+                    <h2 id="leg-contain">Contain in one decision.</h2>
+                    <p class="deck">Alerts reach the team where it already talks, and containment sits beside the evidence.</p>
+                    <ol class="rows">
+                        <li><span class="bullet red" aria-hidden="true">A</span><b>Discord SOC alerts</b><p>Rich embeds with address, threat level, connection type, ISP and ASN, sent the moment a decoy trips.</p></li>
+                        <li><span class="bullet orange" aria-hidden="true">I</span><b>Isolate the address</b><p>One action writes a Windows Firewall inbound block rule on the sensor host.</p></li>
+                        <li><span class="bullet grey" aria-hidden="true">S</span><b>Operator safe list</b><p>Allowlist your own workstation so tests score zero and can never be isolated by mistake.</p></li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+        </div>
+
+        <section class="closer">
+            <div class="wrap">
+                <h2>Plant the first trap tonight.</h2>
+                <p>Sign in, generate a decoy, and leave it where an intruder would look. The next thing to touch it will tell you who it is.</p>
+                <div class="actions">
+                    <a class="btn primary" href="/login">Open the console</a>
+                    <a class="btn" href="https://github.com/Zine007MHIDRA/HoneyGrid" rel="noopener">Source on GitHub</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="foot">
+        <div class="wrap">
+            <span>HoneyGrid Sentinel, a cyber-deception and incident-response project by Zine.</span>
+            <a href="https://github.com/Zine007MHIDRA/HoneyGrid" rel="noopener">github.com/Zine007MHIDRA/HoneyGrid</a>
+        </div>
+    </footer>
+
+    <script>
+        (function () {
+            var toggle = document.getElementById('theme-toggle');
+            toggle.addEventListener('click', function () {
+                var root = document.documentElement;
+                var current = root.dataset.theme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+                var next = current === 'light' ? 'dark' : 'light';
+                root.dataset.theme = next;
+                try { localStorage.setItem('hg-theme', next); } catch (e) {}
+            });
+
+            // Signature: one red bullet rides the route from Plant to Contain, once, then holds.
+            var rider = document.getElementById('rider');
+            var stops = Array.prototype.slice.call(document.querySelectorAll('.stop-dot'));
+            var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            function positions() {
+                var base = rider.parentElement.getBoundingClientRect();
+                var vertical = window.matchMedia('(max-width: 720px)').matches;
+                return stops.map(function (s) {
+                    var r = s.getBoundingClientRect();
+                    return vertical
+                        ? { x: 0, y: r.top - base.top + r.height / 2 - 20 }
+                        : { x: r.left - base.left + r.width / 2 - 20, y: 0 };
+                });
+            }
+            function place(p) { rider.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)'; }
+            function ride() {
+                var p = positions();
+                if (reduce || !rider.animate) { place(p[p.length - 1]); return; }
+                // Arrive at each station, dwell, then travel on; the last station holds.
+                var frames = [];
+                var last = p.length - 1;
+                p.forEach(function (pt, i) {
+                    var t = 'translate(' + pt.x + 'px,' + pt.y + 'px)';
+                    var arrive = (i / last) * 0.88;
+                    frames.push({ transform: t, offset: arrive, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+                    frames.push({ transform: t, offset: i === last ? 1 : arrive + 0.1, easing: 'cubic-bezier(0.65, 0, 0.35, 1)' });
+                });
+                place(p[0]);
+                var anim = rider.animate(frames, { duration: 3600, delay: 500, fill: 'forwards' });
+                anim.onfinish = function () { place(p[p.length - 1]); anim.cancel(); };
+            }
+            if (document.fonts && document.fonts.ready) document.fonts.ready.then(ride); else ride();
+            var resizeTimer;
+            window.addEventListener('resize', function () {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(function () { var p = positions(); place(p[p.length - 1]); }, 120);
+            });
+        })();
+    </script>
+</body>
+</html>

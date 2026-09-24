@@ -1,313 +1,177 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HoneyGrid Sentinel &bull; Tactical Access Gateway</title>
-    
-    <!-- Google Fonts: Geist & Geist Mono -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Geist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-                        mono: ['"Geist Mono"', 'monospace']
-                    },
-                    colors: {
-                        carbon: '#07090e',
-                        surfaceCard: '#0d111a',
-                        surfaceElevated: '#131824',
-                        surfaceBorder: '#1c2436',
-                        hazardCrimson: '#ff2a55',
-                        defenseEmerald: '#10b981',
-                        tacticalAmber: '#f59e0b'
-                    }
-                }
-            }
-        }
-    </script>
-
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in · HoneyGrid Sentinel</title>
+    <link rel="icon" href="/api/logo" />
+    <script>try { var t = localStorage.getItem('hg-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/ui/theme.css" />
     <style>
-        :root {
-            color-scheme: dark;
-        }
-        body {
-            background-color: #07090e;
-            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
-            background-image: 
-                radial-gradient(circle at 50% -20%, rgba(255, 42, 85, 0.08) 0%, transparent 50%),
-                linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-            background-size: 100% 100%, 32px 32px, 32px 32px;
-        }
+        body { min-height: 100vh; display: flex; flex-direction: column; }
+        .band .spacer { flex: 1; }
+        .band a.back { color: var(--band-muted); text-decoration: none; font-size: var(--text-sm); font-weight: 500; }
+        .band a.back:hover { color: var(--band-ink); }
+        .band a.back { white-space: nowrap; }
+        @media (max-width: 600px) { .back-long { display: none; } }
 
-        /* Double-Bezel Hardware Architecture */
-        .hardware-shell {
-            background: rgba(255, 255, 255, 0.025);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 1.25rem;
-            padding: 1px;
-            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.9), 0 0 30px -10px rgba(255, 42, 85, 0.08);
-        }
+        main { flex: 1; display: grid; grid-template-columns: 1fr minmax(360px, 440px); gap: var(--space-8); align-items: center; max-width: 1180px; width: 100%; margin: 0 auto; padding: var(--space-8) var(--space-5); }
 
-        .hardware-core {
-            background: #090d15;
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            border-radius: calc(1.25rem - 1px);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-        }
+        .intro h1 { font-size: clamp(40px, 5.6vw, 72px); font-weight: 800; letter-spacing: -0.035em; line-height: 0.98; max-width: 10ch; }
+        .intro p { margin-top: var(--space-5); color: var(--ink-2); font-size: var(--text-md); max-width: 44ch; }
+        .intro ol { list-style: none; margin: var(--space-7) 0 0; padding: 0 0 0 40px; position: relative; max-width: 420px; }
+        .intro ol::before { content: ""; position: absolute; left: 9px; top: 10px; bottom: 10px; width: 6px; background: var(--ink); }
+        .intro li { position: relative; padding: var(--space-2) 0; color: var(--muted); }
+        .intro li b { color: var(--ink); font-weight: 700; margin-right: 6px; }
+        .intro li::before { content: ""; position: absolute; left: -40px; top: 10px; width: 24px; height: 24px; border-radius: 50%; background: var(--ground); border: 5px solid var(--ink); box-sizing: border-box; }
 
-        .input-box {
-            background: #06080d;
-            border: 1px solid #1c2436;
-            color: #f1f5f9;
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .input-box:focus {
-            outline: none;
-            border-color: #ff2a55;
-            box-shadow: 0 0 0 1px #ff2a55, inset 0 1px 2px rgba(0, 0, 0, 0.8);
-            background: #0a0e17;
+        .panel { background: var(--surface); border: var(--rule-w) solid var(--rule); box-shadow: var(--shadow); }
+        .panel-head { background: var(--band); color: var(--band-ink); padding: var(--space-4) var(--space-5); display: flex; align-items: center; justify-content: space-between; }
+        .panel-head h2 { font-size: var(--text-lg); font-weight: 800; letter-spacing: -0.01em; }
+        .panel-head span { color: var(--band-muted); font-size: var(--text-xs); }
+        .panel-body { padding: var(--space-5); display: grid; gap: var(--space-5); }
+
+        .tabs { display: grid; grid-template-columns: 1fr 1fr; border: var(--rule-w) solid var(--rule); border-radius: var(--radius); }
+        .tabs button { height: 38px; border: 0; background: transparent; color: var(--muted); font-weight: 600; font-size: var(--text-sm); cursor: pointer; }
+        .tabs button + button { border-left: var(--rule-w) solid var(--rule); }
+        .tabs button[aria-selected="true"] { background: var(--ink); color: var(--ground); }
+        .tabs button:not([aria-selected="true"]):hover { color: var(--ink); background: var(--surface-2); }
+
+        .alert { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); border: var(--rule-w) solid var(--line-red); background: color-mix(in srgb, var(--line-red) 10%, var(--surface)); font-size: var(--text-sm); }
+        .alert .bullet { --b: 22px; }
+        .hidden { display: none !important; }
+
+        form { display: grid; gap: var(--space-4); }
+        .pw { position: relative; }
+        .pw .input { padding-right: 44px; }
+        .pw button { position: absolute; right: 4px; top: 4px; width: 32px; height: 32px; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+        .pw button:hover { color: var(--ink); }
+        .row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+        .hint { font-size: var(--text-xs); color: var(--faint); }
+
+        .captcha { display: grid; grid-template-columns: 1fr 40px; gap: var(--space-2); }
+        #captcha-svg-container { height: 48px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; cursor: pointer; color: var(--ink); font-size: var(--text-xs); }
+        #captcha-svg-container svg { display: block; width: 100%; height: 100%; }
+        .reload { height: 48px; padding: 0; }
+        #captcha-reload-icon { transition: transform var(--dur-slow) var(--ease-out); }
+        #captcha-reload-icon.rotate-180 { transform: rotate(180deg); }
+        #captcha-input { text-align: center; letter-spacing: 0.3em; text-transform: uppercase; font-family: var(--font-mono); font-weight: 600; }
+        #captcha-input::placeholder { letter-spacing: 0; text-transform: none; font-family: var(--font-sans); font-weight: 400; }
+
+        .check { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--ink-2); cursor: pointer; }
+        .check input { width: 16px; height: 16px; accent-color: var(--ink); }
+        #register-terms { font-size: var(--text-sm); color: var(--muted); }
+
+        #submit-btn { height: 44px; width: 100%; justify-content: space-between; padding: 0 var(--space-4); font-size: var(--text-base); }
+        .spin { animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .panel-foot { border-top: 1px solid var(--rule); padding: var(--space-3) var(--space-5); display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--faint); }
+
+        @media (max-width: 900px) {
+            main { grid-template-columns: 1fr; gap: var(--space-6); padding: var(--space-6) var(--space-4); }
+            .intro ol { display: none; }
+            .intro h1 { max-width: none; }
+            .band-inner { padding-left: var(--space-4); padding-right: var(--space-4); }
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col justify-between text-slate-200 antialiased selection:bg-rose-500/30 selection:text-rose-200">
-
-    <!-- Top Status Header -->
-    <header class="w-full border-b border-white/[0.06] bg-[#07090e]/80 backdrop-blur-md px-6 py-3.5">
-        <div class="max-w-6xl mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg p-[1px] bg-white/10 border border-white/10 shadow-md shadow-black">
-                    <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover rounded-[7px]" onerror="this.src='/static/logo.jpg'" />
-                </div>
-                <div>
-                    <span class="text-xs font-bold tracking-wider text-white font-mono flex items-center gap-2">
-                        HONEYGRID
-                        <span class="text-[9px] font-mono tracking-widest uppercase px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400 border border-white/[0.08]">
-                            SOC Access Gateway
-                        </span>
-                    </span>
-                </div>
-            </div>
-
-            <div class="flex items-center gap-2.5 font-mono text-[11px] text-slate-400">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span class="text-slate-300 font-semibold tracking-wider">CONSOLE: ONLINE</span>
-                <span class="text-slate-700 hidden sm:inline">//</span>
-                <span class="text-slate-500 hidden sm:inline">ZERO-TRUST AUDIT</span>
-            </div>
+<body>
+    <header class="band">
+        <div class="band-inner">
+            <a class="wordmark" href="/" aria-label="HoneyGrid Sentinel home">
+                <img src="/api/logo" alt="" onerror="this.src='/static/logo.jpg'" />
+                <b>HoneyGrid</b><span>Sentinel</span>
+            </a>
+            <div class="spacer"></div>
+            <a class="back" href="/">About<span class="back-long"> the project</span></a>
         </div>
     </header>
 
-    <!-- Main Auth Card Container -->
-    <main class="flex-1 flex items-center justify-center p-4 sm:p-6 my-6">
-        <div class="w-full max-w-md">
-            
-            <div class="hardware-shell">
-                <div class="hardware-core p-6 sm:p-8">
+    <main>
+        <section class="intro">
+            <h1>Operator console</h1>
+            <p>Sign in to review what tripped your decoys, follow each attacker's line, and contain it.</p>
+            <ol aria-label="Inside the console">
+                <li><b>Incidents</b>every trip, scored and located</li>
+                <li><b>Traps</b>generate and download decoys</li>
+                <li><b>Containment</b>isolate or safelist an address</li>
+                <li><b>Report</b>an exportable post-incident summary</li>
+            </ol>
+        </section>
 
-                    <!-- Logo and Title Area -->
-                    <div class="text-center mb-6">
-                        <div class="inline-flex relative mb-4">
-                            <div class="w-16 h-16 rounded-2xl p-[1px] bg-gradient-to-b from-white/20 via-white/5 to-transparent shadow-2xl shadow-black">
-                                <div class="w-full h-full rounded-[15px] overflow-hidden bg-black flex items-center justify-center border border-white/10">
-                                    <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover" onerror="this.src='/static/logo.jpg'" />
-                                </div>
-                            </div>
-                            <span class="absolute -bottom-1 -right-1 flex h-3 w-3">
-                                <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-[#090d15]"></span>
-                            </span>
-                        </div>
-
-                        <div class="text-[10px] font-mono tracking-[0.2em] text-slate-500 uppercase mb-1">
-                            [ STATION // AUTH-GATEWAY ]
-                        </div>
-                        <h2 class="text-lg font-bold text-white tracking-tight font-sans">
-                            Operator Identity Verification
-                        </h2>
-                        <p class="text-xs text-slate-400 mt-1 font-sans">
-                            Authenticate to inspect deployed canaries and intercept telemetry
-                        </p>
-                    </div>
-
-                    <!-- Auth Mode Tabs -->
-                    <div class="flex rounded-lg bg-black/50 p-1 border border-white/[0.06] mb-6">
-                        <button id="tab-btn-login" onclick="switchAuthTab('login')" class="flex-1 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 bg-white/[0.08] text-white border border-white/[0.08] shadow-sm font-mono tracking-wider">
-                            [ 01 // SIGN IN ]
-                        </button>
-                        <button id="tab-btn-register" onclick="switchAuthTab('register')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all duration-200 text-slate-400 hover:text-slate-200 font-mono tracking-wider">
-                            [ 02 // INITIALIZE ]
-                        </button>
-                    </div>
-
-                    <!-- Alert / Error Banner -->
-                    <div id="auth-alert" class="hidden mb-5 p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs flex items-start gap-2.5">
-                        <svg class="w-4 h-4 text-rose-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        <span id="auth-alert-msg" class="flex-1 font-sans leading-relaxed"></span>
-                    </div>
-
-                    <!-- Form -->
-                    <form id="auth-form" onsubmit="handleAuthSubmit(event)" method="POST" class="space-y-4">
-                        <!-- Honeypot trap -->
-                        <input type="text" name="hp_decoy_field" id="hp-decoy-field" tabindex="-1" autocomplete="off" style="display:none !important; position:absolute; left:-9999px;" aria-hidden="true" />
-
-                        <div>
-                            <label class="block text-xs font-medium text-slate-300 mb-1.5 font-sans">
-                                Operator Email Address
-                            </label>
-                            <div class="relative">
-                                <input 
-                                    id="auth-email" 
-                                    name="email"
-                                    type="email" 
-                                    autocomplete="username"
-                                    required 
-                                    placeholder="operator@sentinel.corp"
-                                    class="w-full input-box px-3.5 py-2.5 rounded-lg text-xs font-mono" 
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="flex items-center justify-between mb-1.5">
-                                <label class="text-xs font-medium text-slate-300 font-sans">
-                                    Access Passphrase
-                                </label>
-                                <span id="pwd-hint" class="text-[10px] text-slate-500 font-mono">Min 6 characters</span>
-                            </div>
-                            <div class="relative">
-                                <input 
-                                    id="auth-password" 
-                                    name="password"
-                                    type="password" 
-                                    autocomplete="current-password"
-                                    required 
-                                    placeholder="••••••••••••" 
-                                    class="w-full input-box px-3.5 py-2.5 rounded-lg text-xs font-mono pr-10" 
-                                />
-                                <button 
-                                    type="button" 
-                                    onclick="togglePasswordVisibility()" 
-                                    tabindex="-1"
-                                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
-                                    <svg id="eye-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Anti-Bot Sentinel CAPTCHA -->
-                        <div class="space-y-1.5 pt-1">
-                            <div class="flex items-center justify-between">
-                                <label class="text-xs font-medium text-slate-300 font-sans flex items-center gap-1.5">
-                                    <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                    </svg>
-                                    <span>Anti-Bot Verification</span>
-                                </label>
-                                <span class="text-[10px] text-slate-500 font-mono tracking-wider">[ HMAC-SHA256 ]</span>
-                            </div>
-                            
-                            <div class="flex items-center gap-2">
-                                <div id="captcha-svg-container" class="rounded-lg border border-white/10 bg-[#06080d] flex items-center justify-center flex-1 h-12 overflow-hidden shadow-inner cursor-pointer" onclick="loadCaptcha()" title="Click to refresh challenge">
-                                    <div class="text-slate-500 text-xs font-mono animate-pulse flex items-center gap-2">
-                                        <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                                        </svg>
-                                        <span>Synthesizing challenge...</span>
-                                    </div>
-                                </div>
-                                <button type="button" onclick="loadCaptcha()" title="Regenerate Challenge" class="h-12 w-12 shrink-0 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] text-slate-300 hover:text-white flex items-center justify-center transition-all active:scale-95 group">
-                                    <svg id="captcha-reload-icon" class="w-4 h-4 text-slate-400 group-hover:text-white group-hover:rotate-180 transition-transform duration-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                </button>
-                            </div>
-
-                            <input 
-                                id="captcha-input" 
-                                name="captcha_answer"
-                                type="text" 
-                                required 
-                                maxlength="5"
-                                autocomplete="off"
-                                autocorrect="off"
-                                spellcheck="false"
-                                placeholder="Enter 5-character challenge code" 
-                                class="w-full input-box px-3.5 py-2 rounded-lg text-xs font-mono tracking-[0.25em] text-center uppercase placeholder:tracking-normal placeholder:font-sans placeholder:normal-case placeholder:text-slate-500" 
-                            />
-                        </div>
-
-                        <div class="flex items-center justify-between pt-1">
-                            <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-400 hover:text-slate-300 transition-colors">
-                                <input type="checkbox" id="remember-me" checked class="w-3.5 h-3.5 rounded bg-black/50 border border-white/10 text-rose-600 focus:ring-0 focus:ring-offset-0 transition cursor-pointer" />
-                                <span class="font-sans">Preserve 7-day session</span>
-                            </label>
-                            <span class="text-[10px] text-slate-500 font-mono">ENCRYPTED COOKIE</span>
-                        </div>
-
-                        <div id="register-terms" class="hidden text-[11px] text-slate-400 leading-relaxed font-sans pt-1">
-                            Provisioning an operator account creates an isolated workspace with tenant-scoped honeytoken assets and threat telemetry.
-                        </div>
-
-                        <!-- Button-in-Button Nested CTA -->
-                        <button 
-                            id="submit-btn" 
-                            type="submit" 
-                            class="w-full mt-2 pl-4 pr-2 py-2 rounded-lg bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-white font-mono text-xs tracking-wider uppercase transition-all duration-300 active:scale-[0.99] flex items-center justify-between group">
-                            <span id="btn-text">AUTHENTICATE TO CONSOLE</span>
-                            <span class="w-7 h-7 rounded-md bg-white/10 flex items-center justify-center text-white group-hover:translate-x-0.5 transition-transform duration-200">
-                                <svg id="btn-spinner" class="hidden animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                                </svg>
-                                <svg id="btn-arrow" class="w-3.5 h-3.5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                </svg>
-                            </span>
-                        </button>
-                    </form>
-
-                    <!-- Technical Specs footer in card -->
-                    <div class="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between text-[10px] text-slate-500 font-mono">
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                            <span>PBKDF2-HMAC-SHA256</span>
-                        </div>
-                        <div>200,000 ROUNDS</div>
-                    </div>
-
+        <section class="panel" aria-labelledby="panel-title">
+            <div class="panel-head">
+                <h2 id="panel-title">Operator access</h2>
+                <span>Session cookie · HttpOnly</span>
+            </div>
+            <div class="panel-body">
+                <div class="tabs" role="tablist" aria-label="Access mode">
+                    <button id="tab-btn-login" type="button" role="tab" aria-selected="true" onclick="switchAuthTab('login')">Sign in</button>
+                    <button id="tab-btn-register" type="button" role="tab" aria-selected="false" onclick="switchAuthTab('register')">Create account</button>
                 </div>
-            </div>
 
-            <!-- Bottom Information Pill -->
-            <div class="mt-6 text-center space-y-1 text-slate-500 text-[11px] font-sans">
-                <p>Public canary callbacks at <code class="text-slate-400 font-mono">/t/{id}</code> trip without authentication.</p>
-                <p>SOC telemetry and incident triage require verified operator credentials.</p>
-            </div>
+                <div id="auth-alert" class="alert hidden" role="alert">
+                    <span class="bullet red" aria-hidden="true">!</span>
+                    <span id="auth-alert-msg"></span>
+                </div>
 
-        </div>
+                <form id="auth-form" onsubmit="handleAuthSubmit(event)" method="POST" novalidate>
+                    <input type="text" name="hp_decoy_field" id="hp-decoy-field" tabindex="-1" autocomplete="off" style="display:none !important; position:absolute; left:-9999px;" aria-hidden="true" />
+
+                    <div class="field">
+                        <label class="label" for="auth-email">Email</label>
+                        <input id="auth-email" name="email" type="email" autocomplete="username" required placeholder="you@company.com" class="input" />
+                    </div>
+
+                    <div class="field">
+                        <div class="row">
+                            <label class="label" for="auth-password">Password</label>
+                            <span id="pwd-hint" class="hint">At least 6 characters</span>
+                        </div>
+                        <div class="pw">
+                            <input id="auth-password" name="password" type="password" autocomplete="current-password" required placeholder="Your password" class="input" />
+                            <button type="button" onclick="togglePasswordVisibility()" aria-label="Show password" id="pw-toggle">
+                                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="row">
+                            <label class="label" for="captcha-input">Verification code</label>
+                            <span class="hint">Click the image for a new code</span>
+                        </div>
+                        <div class="captcha">
+                            <div id="captcha-svg-container" onclick="loadCaptcha()" title="Load a new code">Loading code…</div>
+                            <button type="button" class="btn reload" onclick="loadCaptcha()" aria-label="Load a new verification code">
+                                <svg id="captcha-reload-icon" class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+                            </button>
+                        </div>
+                        <input id="captcha-input" name="captcha_answer" type="text" required maxlength="5" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Type the 5 characters" class="input" />
+                    </div>
+
+                    <label class="check"><input type="checkbox" id="remember-me" checked /> Keep me signed in for 7 days</label>
+
+                    <p id="register-terms" class="hidden">A new account gets its own workspace: only you see your decoys and the incidents they catch.</p>
+
+                    <button id="submit-btn" type="submit" class="btn primary">
+                        <span id="btn-text">Sign in</span>
+                        <svg id="btn-spinner" class="icon spin hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>
+                        <svg id="btn-arrow" class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg>
+                    </button>
+                </form>
+            </div>
+            <div class="panel-foot">
+                <span>Passwords: PBKDF2-HMAC-SHA256</span>
+                <span>5 failed attempts locks sign-in</span>
+            </div>
+        </section>
     </main>
 
-    <!-- Footer -->
-    <footer class="w-full border-t border-white/[0.06] bg-[#07090e]/90 px-6 py-4 text-center text-xs text-slate-500 font-mono">
-        HoneyGrid Sentinel Deception Matrix &bull; Enterprise Threat Hunting
-    </footer>
-
-    <!-- Logic Script -->
     <script>
         let currentAuthMode = 'login';
         let currentCaptchaToken = '';
@@ -316,7 +180,7 @@
             const container = document.getElementById('captcha-svg-container');
             const reloadIcon = document.getElementById('captcha-reload-icon');
             if (reloadIcon) reloadIcon.classList.add('rotate-180');
-            
+
             try {
                 const res = await fetch('/api/auth/captcha');
                 if (res.ok) {
@@ -330,7 +194,7 @@
                 }
             } catch (err) {
                 console.error("CAPTCHA load error:", err);
-                container.innerHTML = '<span class="text-rose-400 text-xs font-mono">Error generating challenge. Click reload.</span>';
+                container.textContent = 'Could not load a code. Click to retry.';
             } finally {
                 setTimeout(() => {
                     if (reloadIcon) reloadIcon.classList.remove('rotate-180');
@@ -341,35 +205,27 @@
         function switchAuthTab(mode) {
             currentAuthMode = mode;
             hideAlert();
-            
+
             const btnLogin = document.getElementById('tab-btn-login');
             const btnRegister = document.getElementById('tab-btn-register');
             const btnText = document.getElementById('btn-text');
             const regTerms = document.getElementById('register-terms');
             const pwdInput = document.getElementById('auth-password');
+            const isLogin = mode === 'login';
 
-            if (mode === 'login') {
-                btnLogin.className = "flex-1 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 bg-white/[0.08] text-white border border-white/[0.08] shadow-sm font-mono tracking-wider";
-                btnRegister.className = "flex-1 py-1.5 text-xs font-medium rounded-md transition-all duration-200 text-slate-400 hover:text-slate-200 font-mono tracking-wider";
-                btnText.innerText = "AUTHENTICATE TO CONSOLE";
-                regTerms.classList.add('hidden');
-                if (pwdInput) pwdInput.autocomplete = "current-password";
-            } else {
-                btnRegister.className = "flex-1 py-1.5 text-xs font-semibold rounded-md transition-all duration-200 bg-white/[0.08] text-white border border-white/[0.08] shadow-sm font-mono tracking-wider";
-                btnLogin.className = "flex-1 py-1.5 text-xs font-medium rounded-md transition-all duration-200 text-slate-400 hover:text-slate-200 font-mono tracking-wider";
-                btnText.innerText = "INITIALIZE OPERATOR ACCOUNT";
-                regTerms.classList.remove('hidden');
-                if (pwdInput) pwdInput.autocomplete = "new-password";
-            }
+            btnLogin.setAttribute('aria-selected', String(isLogin));
+            btnRegister.setAttribute('aria-selected', String(!isLogin));
+            btnText.innerText = isLogin ? 'Sign in' : 'Create operator account';
+            regTerms.classList.toggle('hidden', isLogin);
+            if (pwdInput) pwdInput.autocomplete = isLogin ? 'current-password' : 'new-password';
         }
 
         function togglePasswordVisibility() {
             const pwdInput = document.getElementById('auth-password');
-            if (pwdInput.type === 'password') {
-                pwdInput.type = 'text';
-            } else {
-                pwdInput.type = 'password';
-            }
+            const toggle = document.getElementById('pw-toggle');
+            const show = pwdInput.type === 'password';
+            pwdInput.type = show ? 'text' : 'password';
+            toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
         }
 
         function showAlert(msg) {
@@ -380,8 +236,13 @@
         }
 
         function hideAlert() {
-            const alertBox = document.getElementById('auth-alert');
-            alertBox.classList.add('hidden');
+            document.getElementById('auth-alert').classList.add('hidden');
+        }
+
+        function setBusy(busy) {
+            document.getElementById('submit-btn').disabled = busy;
+            document.getElementById('btn-spinner').classList.toggle('hidden', !busy);
+            document.getElementById('btn-arrow').classList.toggle('hidden', busy);
         }
 
         async function handleAuthSubmit(e) {
@@ -395,29 +256,19 @@
             const rememberMe = document.getElementById('remember-me').checked;
 
             if (!email || !password) {
-                showAlert('Please provide both an email and password.');
+                showAlert('Enter your email and password.');
                 return;
             }
-
             if (password.length < 6) {
-                showAlert('Password must be at least 6 characters.');
+                showAlert('Passwords are at least 6 characters.');
                 return;
             }
-
             if (!captchaAnswer) {
-                showAlert('Please enter the 5-character verification challenge.');
+                showAlert('Type the 5-character verification code shown in the image.');
                 return;
             }
 
-            const submitBtn = document.getElementById('submit-btn');
-            const btnSpinner = document.getElementById('btn-spinner');
-            const btnArrow = document.getElementById('btn-arrow');
-            const btnText = document.getElementById('btn-text');
-
-            submitBtn.disabled = true;
-            btnSpinner.classList.remove('hidden');
-            btnArrow.classList.add('hidden');
-
+            setBusy(true);
             const endpoint = currentAuthMode === 'login' ? '/api/auth/login' : '/api/auth/register';
 
             try {
@@ -437,20 +288,16 @@
                 const data = await res.json();
 
                 if (res.ok && data.status === 'success') {
-                    btnText.innerText = 'ACCESS GRANTED. REDIRECTING...';
+                    document.getElementById('btn-text').innerText = 'Signed in. Opening console…';
                     window.location.href = data.redirect || '/dashboard';
                 } else {
-                    showAlert(data.message || data.detail || 'Authentication failed. Please check credentials and verification code.');
-                    submitBtn.disabled = false;
-                    btnSpinner.classList.add('hidden');
-                    btnArrow.classList.remove('hidden');
+                    showAlert(data.message || data.detail || 'Sign-in failed. Check your email, password and the verification code.');
+                    setBusy(false);
                     loadCaptcha();
                 }
             } catch (err) {
-                showAlert('Network or gateway error: ' + err.message);
-                submitBtn.disabled = false;
-                btnSpinner.classList.add('hidden');
-                btnArrow.classList.remove('hidden');
+                showAlert('Could not reach the server (' + err.message + '). Check your connection and try again.');
+                setBusy(false);
                 loadCaptcha();
             }
         }
@@ -466,7 +313,7 @@
                     }
                 }
             } catch (e) {}
-            
+
             loadCaptcha();
         };
     </script>

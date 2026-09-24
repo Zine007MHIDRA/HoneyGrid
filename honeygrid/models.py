@@ -79,6 +79,7 @@ class IncidentEvent(BaseModel):
     device_memory: Optional[int] = None
     local_lan_ip: Optional[str] = None
     client_timezone: Optional[str] = None
+    client_platform: Optional[str] = None
 
     # Raw forensics
     raw_headers: Optional[Dict[str, str]] = None

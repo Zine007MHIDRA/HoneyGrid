@@ -46,3 +46,6 @@ canary_test_output/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Impeccable design-tool working files (review captures, decision logs)
+.impeccable/

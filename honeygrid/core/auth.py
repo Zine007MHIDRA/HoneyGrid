@@ -6,7 +6,6 @@ import secrets
 from typing import Tuple
 
 CAPTCHA_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
-CAPTCHA_COLORS = ["#f43f5e", "#06b6d4", "#10b981", "#f59e0b", "#a855f7", "#38bdf8"]
 
 def hash_password(password: str, salt: str = None) -> Tuple[str, str]:
     """
@@ -54,23 +53,22 @@ def generate_captcha(secret_key: str) -> Tuple[str, str, str]:
     
     elements = []
     # Background plate
-    elements.append('<rect width="100%" height="100%" fill="#090d16" rx="10" stroke="#1c2438" stroke-width="1.5"/>')
+    elements.append('<rect width="100%" height="100%" fill="none"/>')
     
     # Noise wave paths
     for _ in range(4):
         x1, y1 = random.randint(5, 35), random.randint(8, 42)
         qx, qy = random.randint(50, 130), random.randint(5, 45)
         x2, y2 = random.randint(145, 175), random.randint(8, 42)
-        color = random.choice(["#1e293b", "#334155", "#475569"])
+        color = "currentColor"
         dash = ' stroke-dasharray="4,4"' if random.random() > 0.5 else ''
-        elements.append(f'<path d="M {x1} {y1} Q {qx} {qy} {x2} {y2}" stroke="{color}" stroke-width="1.5"{dash} fill="none"/>')
+        elements.append(f'<path d="M {x1} {y1} Q {qx} {qy} {x2} {y2}" stroke="{color}" stroke-opacity="0.35" stroke-width="1.5"{dash} fill="none"/>')
         
     # Noise dots
     for _ in range(25):
         cx, cy = random.randint(5, 175), random.randint(5, 45)
         r = random.uniform(1.0, 2.0)
-        c = random.choice(["#334155", "#1e293b", "#f43f5e33", "#06b6d433"])
-        elements.append(f'<circle cx="{cx}" cy="{cy}" r="{r:.1f}" fill="{c}"/>')
+        elements.append(f'<circle cx="{cx}" cy="{cy}" r="{r:.1f}" fill="currentColor" fill-opacity="0.25"/>')
         
     # Characters with subtle jitter, rotation and vibrant neon tones
     x_positions = [22, 52, 82, 112, 142]
@@ -78,10 +76,9 @@ def generate_captcha(secret_key: str) -> Tuple[str, str, str]:
         x = x_positions[i] + random.randint(-2, 2)
         y = random.randint(31, 35)
         rot = random.randint(-14, 14)
-        color = CAPTCHA_COLORS[i % len(CAPTCHA_COLORS)]
         elements.append(
-            f'<text x="{x}" y="{y}" font-family="\'Geist Mono\', monospace, sans-serif" font-size="24" font-weight="800" '
-            f'fill="{color}" transform="rotate({rot}, {x}, {y})" filter="drop-shadow(0px 0px 3px {color}88)">{char}</text>'
+            f'<text x="{x}" y="{y}" font-family="\'JetBrains Mono\', monospace, sans-serif" font-size="24" font-weight="700" '
+            f'fill="currentColor" transform="rotate({rot}, {x}, {y})">{char}</text>'
         )
         
     svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="180" height="48" viewBox="0 0 180 48">{"".join(elements)}</svg>'

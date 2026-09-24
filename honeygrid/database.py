@@ -185,7 +185,8 @@ def init_db():
         ("cpu_cores", "INTEGER"),
         ("device_memory", "INTEGER"),
         ("local_lan_ip", "TEXT"),
-        ("client_timezone", "TEXT")
+        ("client_timezone", "TEXT"),
+        ("client_platform", "TEXT")
     ]
     for col_name, col_type in new_cols:
         if col_name not in existing_cols:
@@ -193,6 +194,19 @@ def init_db():
                 cursor.execute(f"ALTER TABLE incidents ADD COLUMN {col_name} {col_type}")
             except sqlite3.OperationalError:
                 pass
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_incidents_ip ON incidents(attacker_ip)")
+
+    # Browser telemetry that arrived before its incident row was written (GeoIP still resolving)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS pending_telemetry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token_id TEXT NOT NULL,
+        client_ip TEXT NOT NULL,
+        is_local INTEGER DEFAULT 0,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )
+    """)
 
     conn.commit()
     conn.close()
@@ -583,18 +597,40 @@ def record_incident(event: IncidentEvent) -> int:
         event.mitre_technique
     ))
     incident_id = cursor.lastrowid
+
+    # Merge browser telemetry that beat the incident row to the database
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=TELEMETRY_WINDOW_MINUTES)).isoformat()
+    if event.is_local_ip:
+        cursor.execute(
+            "SELECT id, payload FROM pending_telemetry WHERE token_id = ? AND is_local = 1 AND created_at >= ? ORDER BY id DESC LIMIT 1",
+            (event.token_id, cutoff)
+        )
+    else:
+        cursor.execute(
+            "SELECT id, payload FROM pending_telemetry WHERE token_id = ? AND client_ip = ? AND created_at >= ? ORDER BY id DESC LIMIT 1",
+            (event.token_id, event.attacker_ip, cutoff)
+        )
+    pending = cursor.fetchone()
+    if pending:
+        try:
+            _apply_telemetry(cursor, incident_id, BrowserTelemetry(**json.loads(pending["payload"])))
+        except Exception:
+            pass
+        cursor.execute("DELETE FROM pending_telemetry WHERE id = ?", (pending["id"],))
+    cursor.execute("DELETE FROM pending_telemetry WHERE created_at < ?", (cutoff,))
+
     conn.commit()
     conn.close()
     return incident_id
 
-def update_incident_telemetry(token_id: str, telemetry: BrowserTelemetry):
-    """Enriches the most recent incident for this token with browser/hardware telemetry."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+TELEMETRY_WINDOW_MINUTES = 10
+
+def _apply_telemetry(cursor: sqlite3.Cursor, incident_id: int, telemetry: BrowserTelemetry):
     cursor.execute("""
-        UPDATE incidents 
-        SET gpu_renderer = ?, screen_res = ?, cpu_cores = ?, device_memory = ?, local_lan_ip = ?, client_timezone = ?
-        WHERE id = (SELECT MAX(id) FROM incidents WHERE token_id = ?)
+        UPDATE incidents
+        SET gpu_renderer = ?, screen_res = ?, cpu_cores = ?, device_memory = ?, local_lan_ip = ?,
+            client_timezone = ?, client_platform = ?
+        WHERE id = ?
     """, (
         telemetry.gpu_renderer,
         telemetry.screen_res,
@@ -602,94 +638,168 @@ def update_incident_telemetry(token_id: str, telemetry: BrowserTelemetry):
         telemetry.device_memory,
         telemetry.local_lan_ip,
         telemetry.client_timezone,
-        token_id
+        telemetry.platform,
+        incident_id
     ))
-    conn.commit()
-    conn.close()
 
-def list_incidents(user_id: Optional[str] = None, is_admin: bool = False, limit: int = 50) -> List[IncidentEvent]:
+def update_incident_telemetry(token_id: str, telemetry: BrowserTelemetry, client_ip: str, is_local: bool = False) -> Optional[int]:
+    """
+    Attaches browser/hardware telemetry to the incident created by the same visitor.
+    Matches on token + client IP within a short window so concurrent visitors of one token
+    never overwrite each other. If the incident isn't written yet, the payload is parked in
+    pending_telemetry and merged by record_incident. Returns the enriched incident id, if any.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
-    if is_admin or user_id is None:
-        cursor.execute("SELECT * FROM incidents ORDER BY id DESC LIMIT ?", (limit,))
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=TELEMETRY_WINDOW_MINUTES)).isoformat()
+    if is_local:
+        # Local callers are recorded under their resolved public egress IP, so match on the local flag
+        cursor.execute(
+            "SELECT MAX(id) FROM incidents WHERE token_id = ? AND is_local_ip = 1 AND timestamp >= ?",
+            (token_id, cutoff)
+        )
     else:
-        cursor.execute("""
-            SELECT incidents.* FROM incidents 
-            JOIN tokens ON incidents.token_id = tokens.id 
-            WHERE tokens.owner_id = ? 
-            ORDER BY incidents.id DESC LIMIT ?
-        """, (user_id, limit))
+        cursor.execute(
+            "SELECT MAX(id) FROM incidents WHERE token_id = ? AND attacker_ip = ? AND timestamp >= ?",
+            (token_id, client_ip, cutoff)
+        )
+    incident_id = cursor.fetchone()[0]
+    if incident_id:
+        _apply_telemetry(cursor, incident_id, telemetry)
+    else:
+        cursor.execute(
+            "INSERT INTO pending_telemetry (token_id, client_ip, is_local, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+            (token_id, client_ip, 1 if is_local else 0, telemetry.model_dump_json(), datetime.now(timezone.utc).isoformat())
+        )
+    conn.commit()
+    conn.close()
+    return incident_id
+
+def _row_to_incident(row: sqlite3.Row) -> IncidentEvent:
+    """Builds an IncidentEvent, self-healing coordinates for public IPs missing GPS fixes."""
+    row_dict = dict(row)
+    lat = row_dict.get("geo_lat")
+    lon = row_dict.get("geo_lon")
+    country = row_dict.get("geo_country", "Unknown")
+    city = row_dict.get("geo_city", "Unknown")
+    is_local = bool(row_dict.get("is_local_ip", 0))
+
+    # Self-healing coordinates for public IPs missing GPS fixes
+    if (lat is None or lon is None) and not is_local:
+        from honeygrid.core.geo import COUNTRY_CENTROIDS, extract_geo_from_headers
+        raw_h_json = row_dict.get("raw_headers")
+        if raw_h_json:
+            try:
+                h_dict = json.loads(raw_h_json) if isinstance(raw_h_json, str) else raw_h_json
+                edge = extract_geo_from_headers(h_dict, row_dict.get("attacker_ip", ""))
+                if edge and edge.get("lat") and edge.get("lon"):
+                    lat = edge["lat"]
+                    lon = edge["lon"]
+                    if country in ("Unknown", "Localhost / Internal Subnet"):
+                        country = edge["country"]
+                    if city in ("Unknown", "Private Network"):
+                        city = edge["city"]
+            except Exception:
+                pass
+
+        if (lat is None or lon is None) and country and country != "Unknown":
+            centroid = COUNTRY_CENTROIDS.get(country.upper())
+            if centroid:
+                lat, lon = centroid
+
+        if (lat is None or lon is None) and row_dict.get("attacker_ip", "").startswith("105.157."):
+            lat, lon = 31.7917, -7.0926
+            if country in ("Unknown", "Localhost / Internal Subnet"):
+                country = "Morocco"
+
+    return IncidentEvent(
+        id=row_dict["id"],
+        token_id=row_dict["token_id"],
+        timestamp=row_dict["timestamp"],
+        attacker_ip=row_dict["attacker_ip"],
+        is_local_ip=is_local,
+        client_tool=row_dict.get("client_tool", "Unknown"),
+        user_agent=row_dict.get("user_agent"),
+        http_method=row_dict.get("http_method"),
+        request_path=row_dict.get("request_path"),
+        query_params=row_dict.get("query_params"),
+        geo_country=country,
+        geo_city=city,
+        geo_region=row_dict.get("geo_region", "Unknown"),
+        geo_isp=row_dict.get("geo_isp", "Unknown"),
+        geo_asn=row_dict.get("geo_asn", "Unknown"),
+        geo_lat=lat,
+        geo_lon=lon,
+        threat_score=row_dict.get("threat_score", 15),
+        connection_type=row_dict.get("connection_type", "Unknown"),
+        is_vpn_proxy=bool(row_dict.get("is_vpn_proxy", 0)),
+        is_tor=bool(row_dict.get("is_tor", 0)),
+        gpu_renderer=row_dict.get("gpu_renderer"),
+        screen_res=row_dict.get("screen_res"),
+        cpu_cores=row_dict.get("cpu_cores"),
+        device_memory=row_dict.get("device_memory"),
+        local_lan_ip=row_dict.get("local_lan_ip"),
+        client_timezone=row_dict.get("client_timezone"),
+        client_platform=row_dict.get("client_platform"),
+        raw_headers=json.loads(row_dict["raw_headers"] or "{}") if row_dict.get("raw_headers") else None,
+        mitre_technique=row_dict.get("mitre_technique") or "T1552: Unsecured Credentials"
+    )
+
+def _incident_scope(user_id: Optional[str], is_admin: bool) -> Tuple[str, str, list]:
+    """Returns (FROM clause, WHERE clause, params) restricting incidents to the caller's tenant."""
+    if is_admin:
+        return "FROM incidents", "WHERE 1 = 1", []
+    if not user_id:
+        return "FROM incidents", "WHERE 1 = 0", []
+    return "FROM incidents JOIN tokens ON incidents.token_id = tokens.id", "WHERE tokens.owner_id = ?", [user_id]
+
+def list_incidents(
+    user_id: Optional[str] = None,
+    is_admin: bool = False,
+    limit: int = 50,
+    q: Optional[str] = None,
+    min_score: Optional[int] = None
+) -> List[IncidentEvent]:
+    # Callers without a user (CLI, tests) have always seen every incident
+    from_clause, where, params = _incident_scope(user_id, is_admin or user_id is None)
+    if q:
+        like = f"%{q.strip()}%"
+        where += (" AND (incidents.attacker_ip LIKE ? OR incidents.geo_country LIKE ? OR incidents.geo_city LIKE ?"
+                  " OR incidents.geo_isp LIKE ? OR incidents.token_id LIKE ?)")
+        params += [like] * 5
+    if min_score is not None:
+        where += " AND incidents.threat_score >= ?"
+        params.append(min_score)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT incidents.* {from_clause} {where} ORDER BY incidents.id DESC LIMIT ?", (*params, limit))
     rows = cursor.fetchall()
     conn.close()
-    results = []
-    for row in rows:
-        row_dict = dict(row)
-        lat = row_dict.get("geo_lat")
-        lon = row_dict.get("geo_lon")
-        country = row_dict.get("geo_country", "Unknown")
-        city = row_dict.get("geo_city", "Unknown")
-        is_local = bool(row_dict.get("is_local_ip", 0))
+    return [_row_to_incident(row) for row in rows]
 
-        # Self-healing coordinates for public IPs missing GPS fixes
-        if (lat is None or lon is None) and not is_local:
-            from honeygrid.core.geo import COUNTRY_CENTROIDS, extract_geo_from_headers
-            raw_h_json = row_dict.get("raw_headers")
-            if raw_h_json:
-                try:
-                    h_dict = json.loads(raw_h_json) if isinstance(raw_h_json, str) else raw_h_json
-                    edge = extract_geo_from_headers(h_dict, row_dict.get("attacker_ip", ""))
-                    if edge and edge.get("lat") and edge.get("lon"):
-                        lat = edge["lat"]
-                        lon = edge["lon"]
-                        if country in ("Unknown", "Localhost / Internal Subnet"):
-                            country = edge["country"]
-                        if city in ("Unknown", "Private Network"):
-                            city = edge["city"]
-                except Exception:
-                    pass
+def get_incident(incident_id: int, user_id: Optional[str] = None, is_admin: bool = False) -> Optional[IncidentEvent]:
+    """Fetches one incident; None when it doesn't exist or belongs to another tenant."""
+    from_clause, where, params = _incident_scope(user_id, is_admin)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT incidents.* {from_clause} {where} AND incidents.id = ?", (*params, incident_id))
+    row = cursor.fetchone()
+    conn.close()
+    return _row_to_incident(row) if row else None
 
-            if (lat is None or lon is None) and country and country != "Unknown":
-                centroid = COUNTRY_CENTROIDS.get(country.upper())
-                if centroid:
-                    lat, lon = centroid
-
-            if (lat is None or lon is None) and row_dict.get("attacker_ip", "").startswith("105.157."):
-                lat, lon = 31.7917, -7.0926
-                if country in ("Unknown", "Localhost / Internal Subnet"):
-                    country = "Morocco"
-
-        results.append(IncidentEvent(
-            id=row_dict["id"],
-            token_id=row_dict["token_id"],
-            timestamp=row_dict["timestamp"],
-            attacker_ip=row_dict["attacker_ip"],
-            is_local_ip=is_local,
-            client_tool=row_dict.get("client_tool", "Unknown"),
-            user_agent=row_dict.get("user_agent"),
-            http_method=row_dict.get("http_method"),
-            request_path=row_dict.get("request_path"),
-            query_params=row_dict.get("query_params"),
-            geo_country=country,
-            geo_city=city,
-            geo_region=row_dict.get("geo_region", "Unknown"),
-            geo_isp=row_dict.get("geo_isp", "Unknown"),
-            geo_asn=row_dict.get("geo_asn", "Unknown"),
-            geo_lat=lat,
-            geo_lon=lon,
-            threat_score=row_dict.get("threat_score", 15),
-            connection_type=row_dict.get("connection_type", "Unknown"),
-            is_vpn_proxy=bool(row_dict.get("is_vpn_proxy", 0)),
-            is_tor=bool(row_dict.get("is_tor", 0)),
-            gpu_renderer=row_dict.get("gpu_renderer"),
-            screen_res=row_dict.get("screen_res"),
-            cpu_cores=row_dict.get("cpu_cores"),
-            device_memory=row_dict.get("device_memory"),
-            local_lan_ip=row_dict.get("local_lan_ip"),
-            client_timezone=row_dict.get("client_timezone"),
-            raw_headers=json.loads(row_dict["raw_headers"] or "{}") if row_dict.get("raw_headers") else None,
-            mitre_technique=row_dict.get("mitre_technique") or "T1552: Unsecured Credentials"
-        ))
-    return results
+def list_incidents_by_ip(ip: str, user_id: Optional[str] = None, is_admin: bool = False, limit: int = 100) -> List[IncidentEvent]:
+    """Chronological (oldest first) activity of one attacker IP within the caller's tenant."""
+    from_clause, where, params = _incident_scope(user_id, is_admin)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT * FROM (SELECT incidents.* {from_clause} {where} AND incidents.attacker_ip = ?"
+        f" ORDER BY incidents.id DESC LIMIT ?) ORDER BY id ASC",
+        (*params, ip, limit)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [_row_to_incident(row) for row in rows]
 
 def get_dashboard_stats(user_id: Optional[str] = None, is_admin: bool = False) -> Dict[str, Any]:
     """Computes summary metrics for the SOC web dashboard, scoped by user unless admin."""

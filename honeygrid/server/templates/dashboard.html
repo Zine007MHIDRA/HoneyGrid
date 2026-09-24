@@ -1,650 +1,551 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HoneyGrid Sentinel &bull; Cyber Deception & Active SOC Matrix</title>
-    
-    <!-- Google Fonts: Geist & Geist Mono -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Geist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-                        mono: ['"Geist Mono"', 'monospace']
-                    },
-                    colors: {
-                        carbon: '#07090e',
-                        surfaceCard: '#0d111a',
-                        surfaceElevated: '#131824',
-                        surfaceBorder: '#1c2436',
-                        hazardCrimson: '#ff2a55',
-                        defenseEmerald: '#10b981',
-                        tacticalAmber: '#f59e0b'
-                    }
-                }
-            }
-        }
-    </script>
-
-    <!-- Leaflet CSS & JS for Tactical Attack Map -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Console · HoneyGrid Sentinel</title>
+    <link rel="icon" href="/api/logo" />
+    <script>try { var t = localStorage.getItem('hg-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/ui/theme.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
     <style>
-        :root {
-            color-scheme: dark;
-        }
-        body {
-            background-color: #07090e;
-            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
-            background-image: 
-                radial-gradient(circle at 50% 0%, rgba(255, 42, 85, 0.05) 0%, transparent 50%),
-                linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-            background-size: 100% 100%, 32px 32px, 32px 32px;
-            overflow-x: hidden;
-        }
+        .hidden { display: none !important; }
+        body { min-height: 100vh; }
 
-        /* Double-Bezel Hardware Architecture */
-        .hardware-shell {
-            background: rgba(255, 255, 255, 0.025);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 1rem;
-            padding: 1px;
-            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8);
-            transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .hardware-shell:hover {
-            border-color: rgba(255, 255, 255, 0.14);
-        }
+        /* ---------- Band ---------- */
+        .band { position: sticky; top: 0; z-index: 1000; }
+        .band-inner { gap: var(--space-3); }
+        .scope { color: var(--band-muted); font-size: var(--text-xs); font-weight: 600; padding-left: var(--space-3); border-left: 1px solid var(--band-rule); white-space: nowrap; }
+        .band .spacer { flex: 1; }
+        .search-trigger { min-width: 240px; justify-content: space-between; color: var(--band-muted) !important; font-weight: 500; }
+        .search-trigger kbd { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--band-rule); padding: 1px 6px; border-radius: var(--radius); color: var(--band-muted); }
+        .clock { font-size: var(--text-md); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--band-ink); white-space: nowrap; }
+        .clock small { color: var(--band-muted); font-size: 11px; margin-left: 4px; }
+        .icon-btn { width: 36px; padding: 0; }
+        .user { position: relative; }
+        .user-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 240px; background: var(--surface); color: var(--ink); border: var(--rule-w) solid var(--rule-strong); box-shadow: var(--shadow); padding: var(--space-2); z-index: 1100; }
+        .user-menu .who { padding: var(--space-2) var(--space-3) var(--space-3); border-bottom: 1px solid var(--rule); margin-bottom: var(--space-2); }
+        .user-menu .who b { display: block; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; }
+        .user-menu .who span { font-size: var(--text-xs); color: var(--muted); }
+        .user-menu button { width: 100%; display: flex; align-items: center; gap: var(--space-2); height: 36px; padding: 0 var(--space-3); border: 0; background: transparent; cursor: pointer; font-size: var(--text-sm); text-align: left; }
+        .user-menu button:hover { background: var(--surface-2); }
 
-        .hardware-core {
-            background: #090d15;
-            border: 1px solid rgba(255, 255, 255, 0.04);
-            border-radius: calc(1rem - 1px);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-        }
+        /* ---------- Shell ---------- */
+        .shell { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: calc(100vh - 64px); }
+        .rail { border-right: var(--rule-w) solid var(--rule); padding: var(--space-5) 0; position: sticky; top: 64px; align-self: start; height: calc(100vh - 64px); display: flex; flex-direction: column; }
+        .rail nav { display: grid; }
+        .rail a { display: flex; align-items: center; gap: var(--space-3); height: 44px; padding: 0 var(--space-5); color: var(--muted); text-decoration: none; font-weight: 600; font-size: var(--text-sm); border-left: 4px solid transparent; }
+        .rail a:hover { color: var(--ink); background: var(--surface); }
+        .rail a[aria-current="page"] { color: var(--ink); border-left-color: var(--ink); background: var(--surface); }
+        .rail a .count { margin-left: auto; font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--faint); }
+        .rail .rail-foot { margin-top: auto; padding: var(--space-4) var(--space-5); font-size: var(--text-xs); color: var(--faint); display: grid; gap: var(--space-2); }
+        .legend { display: grid; gap: 6px; }
+        .legend div { display: flex; align-items: center; gap: var(--space-2); color: var(--muted); }
+        .legend .bullet { --b: 14px; }
 
-        /* Tactical Defense-Grade Glowing & Flickering Radar Pin */
-        .custom-radar-pin {
-            background: transparent !important;
-            border: none !important;
-        }
+        .view { padding: var(--space-6) var(--space-6) var(--space-8); min-width: 0; }
+        .view-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-5); flex-wrap: wrap; }
+        .view-head h1 { font-size: var(--text-2xl); font-weight: 800; letter-spacing: -0.03em; }
+        .view-head p { color: var(--muted); margin-top: var(--space-1); }
 
-        .radar-beacon-wrapper {
-            position: relative;
-            width: 28px;
-            height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
+        /* ---------- Metrics strip ---------- */
+        .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: var(--rule-w) solid var(--ink); border-bottom: 1px solid var(--rule); margin-bottom: var(--space-6); }
+        .metric { padding: var(--space-4) var(--space-5) var(--space-4) 0; }
+        .metric + .metric { padding-left: var(--space-5); border-left: 1px solid var(--rule); }
+        .metric .value { font-size: var(--text-2xl); font-weight: 800; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+        .metric .value.zero { color: var(--ghost); }
+        .metric .name { margin-top: var(--space-2); font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); }
+        .metric .cap { font-size: var(--text-xs); color: var(--muted); }
 
-        /* Expanding Sonar Ping Ring */
-        .radar-beacon-ping {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            pointer-events: none;
-        }
-        .beacon-crimson.radar-beacon-ping {
-            background: rgba(255, 42, 85, 0.45);
-            box-shadow: 0 0 16px rgba(255, 42, 85, 0.95);
-            animation: radar-sonar-ping 1.7s cubic-bezier(0, 0, 0.2, 1) infinite;
-        }
-        .beacon-amber.radar-beacon-ping {
-            background: rgba(245, 158, 11, 0.45);
-            box-shadow: 0 0 16px rgba(245, 158, 11, 0.95);
-            animation: radar-sonar-ping 1.7s cubic-bezier(0, 0, 0.2, 1) infinite;
-        }
-        .beacon-cyan.radar-beacon-ping {
-            background: rgba(6, 182, 212, 0.45);
-            box-shadow: 0 0 16px rgba(6, 182, 212, 0.95);
-            animation: radar-sonar-ping 1.7s cubic-bezier(0, 0, 0.2, 1) infinite;
-        }
+        /* ---------- Main grid ---------- */
+        .grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--space-6); align-items: start; }
+        .panel { background: var(--surface); border: var(--rule-w) solid var(--rule); min-width: 0; }
+        .panel-bar { display: flex; align-items: center; gap: var(--space-3); min-height: 48px; padding: var(--space-2) var(--space-4); border-bottom: var(--rule-w) solid var(--rule); flex-wrap: wrap; }
+        .panel-bar h2 { font-size: var(--text-md); font-weight: 800; letter-spacing: -0.01em; }
+        .panel-bar .sub { color: var(--muted); font-size: var(--text-xs); }
+        .panel-bar .spacer { flex: 1; }
 
-        /* High-Intensity Phosphor Core with White Center & Crimson Halo */
-        .radar-beacon-core {
-            position: relative;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            z-index: 2;
-        }
-        .beacon-crimson.radar-beacon-core {
-            background: #ffffff;
-            border: 2px solid #ff2a55;
-            box-shadow: 0 0 10px #ff2a55, 0 0 20px #ff2a55, 0 0 35px rgba(255, 42, 85, 0.85);
-            animation: radar-flicker-crimson 1.1s ease-in-out infinite alternate;
-        }
-        .beacon-amber.radar-beacon-core {
-            background: #ffffff;
-            border: 2px solid #f59e0b;
-            box-shadow: 0 0 10px #f59e0b, 0 0 20px #f59e0b, 0 0 30px rgba(245, 158, 11, 0.85);
-            animation: radar-flicker-amber 1.1s ease-in-out infinite alternate;
-        }
-        .beacon-cyan.radar-beacon-core {
-            background: #ffffff;
-            border: 2px solid #06b6d4;
-            box-shadow: 0 0 10px #06b6d4, 0 0 20px #06b6d4, 0 0 30px rgba(6, 182, 212, 0.85);
-            animation: radar-flicker-cyan 1.1s ease-in-out infinite alternate;
-        }
+        .chips { display: flex; gap: 0; border: var(--rule-w) solid var(--rule); border-radius: var(--radius); }
+        .chip { height: 30px; padding: 0 var(--space-3); border: 0; background: transparent; color: var(--muted); font-weight: 600; font-size: var(--text-xs); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .chip + .chip { border-left: var(--rule-w) solid var(--rule); }
+        .chip[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+        .chip .bullet { --b: 10px; }
+        .filter-input { height: 34px; width: 200px; }
 
-        @keyframes radar-sonar-ping {
-            0% { transform: scale(0.35); opacity: 1; }
-            70%, 100% { transform: scale(2.8); opacity: 0; }
-        }
+        /* ---------- Departures board ---------- */
+        .board-head, .dep { display: grid; grid-template-columns: 36px minmax(0, 1.25fr) minmax(0, 1.2fr) minmax(0, 1.3fr) 76px 68px; gap: var(--space-4); align-items: center; padding: 0 var(--space-4); }
+        .board-head { height: 34px; font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--rule); }
+        .dep { min-height: 60px; border-bottom: 1px solid var(--rule); cursor: pointer; position: relative; }
+        .dep:hover { background: var(--surface-2); }
+        .dep:focus-visible { outline-offset: -2px; }
+        .dep.selected { background: var(--surface-2); box-shadow: inset 4px 0 0 var(--ink); }
+        .dep.fresh { animation: fresh 2.4s var(--ease-out); }
+        @keyframes fresh { from { background: color-mix(in srgb, var(--line-yellow) 22%, var(--surface)); } to { background: transparent; } }
+        .dep .ip { font-family: var(--font-mono); font-weight: 600; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dep .sub { font-size: var(--text-xs); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dep .main { font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dep .to { font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dep .to .arrow { color: var(--faint); margin: 0 6px; }
+        .dep .to code { color: var(--ink); }
+        .dep time { font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; white-space: nowrap; }
+        .dep time span { display: block; color: var(--faint); font-weight: 400; font-size: var(--text-xs); }
+        .dep .mob { display: none; }
+        .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+        .row-actions .btn { width: 30px; padding: 0; }
+        .empty { padding: var(--space-8) var(--space-5); display: grid; justify-items: start; gap: var(--space-3); }
+        .empty .bullet { --b: 40px; }
+        .empty b { font-size: var(--text-lg); }
+        .empty span { color: var(--muted); max-width: 48ch; }
+        .board-more { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--rule); font-size: var(--text-xs); color: var(--muted); }
+        .board-foot { padding: var(--space-3) var(--space-4); font-size: var(--text-xs); color: var(--faint); display: flex; justify-content: space-between; }
+        .sync-bad { color: var(--line-red); font-weight: 600; }
 
-        @keyframes radar-flicker-crimson {
-            0% { opacity: 0.7; filter: drop-shadow(0 0 4px #ff2a55); }
-            25% { opacity: 1.0; filter: drop-shadow(0 0 14px #ff2a55); }
-            45% { opacity: 0.85; filter: drop-shadow(0 0 8px #ff2a55); }
-            70% { opacity: 1.0; filter: drop-shadow(0 0 24px #ff2a55); }
-            85% { opacity: 0.9; filter: drop-shadow(0 0 12px #ff2a55); }
-            100% { opacity: 1.0; filter: drop-shadow(0 0 20px #ff2a55); }
-        }
+        /* ---------- Map ---------- */
+        #attack-map { height: 360px; background: var(--ground); z-index: 1; }
+        .map-readout { font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--muted); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .leaflet-container { font-family: var(--font-sans); }
+        .leaflet-bar { border: var(--rule-w) solid var(--rule-strong) !important; border-radius: var(--radius) !important; box-shadow: none !important; }
+        .leaflet-bar a { background: var(--surface) !important; color: var(--ink) !important; border-bottom-color: var(--rule) !important; }
+        .map-pin { position: relative; }
+        .map-pin .bullet { --b: 26px; font-size: 11px; box-shadow: 0 0 0 2px var(--ground), 0 4px 10px rgba(0,0,0,0.45); }
+        .map-pin.latest::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid currentColor; animation: ring 1.8s var(--ease-out) 3; opacity: 0; }
+        .map-pin.red { color: var(--line-red); } .map-pin.orange { color: var(--line-orange); } .map-pin.yellow { color: var(--line-yellow); } .map-pin.green { color: var(--line-green); } .map-pin.grey { color: var(--line-grey); }
+        @keyframes ring { 0% { transform: scale(0.8); opacity: 0.9; } 100% { transform: scale(2); opacity: 0; } }
+        .leaflet-popup-content-wrapper { background: var(--surface); color: var(--ink); border: var(--rule-w) solid var(--ink); border-radius: var(--radius); box-shadow: var(--shadow); }
+        .leaflet-popup-tip { background: var(--ink); }
+        .leaflet-popup-content { margin: var(--space-3) var(--space-4); font-size: var(--text-sm); line-height: 1.45; }
+        .leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
+        .pop-ip { font-family: var(--font-mono); font-weight: 600; }
+        .pop-sub { color: var(--muted); font-size: var(--text-xs); }
+        .pop-open { margin-top: var(--space-2); }
 
-        @keyframes radar-flicker-amber {
-            0% { opacity: 0.7; filter: drop-shadow(0 0 4px #f59e0b); }
-            50% { opacity: 1.0; filter: drop-shadow(0 0 16px #f59e0b); }
-            100% { opacity: 0.85; filter: drop-shadow(0 0 8px #f59e0b); }
-        }
+        .origins { list-style: none; margin: 0; padding: 0; }
+        .origins li { display: grid; grid-template-columns: minmax(0, 1fr) 1fr 36px; gap: var(--space-3); align-items: center; padding: 10px var(--space-4); border-bottom: 1px solid var(--rule); font-size: var(--text-sm); }
+        .origins li:last-child { border-bottom: 0; }
+        .origins .bar { height: 6px; background: var(--rule); }
+        .origins .bar i { display: block; height: 100%; background: var(--ink); }
+        .origins .n { text-align: right; font-variant-numeric: tabular-nums; font-size: var(--text-xs); color: var(--muted); }
+        .origins .none { display: block; color: var(--muted); font-size: var(--text-sm); }
 
-        @keyframes radar-flicker-cyan {
-            0% { opacity: 0.7; filter: drop-shadow(0 0 4px #06b6d4); }
-            50% { opacity: 1.0; filter: drop-shadow(0 0 16px #06b6d4); }
-            100% { opacity: 0.85; filter: drop-shadow(0 0 8px #06b6d4); }
-        }
+        /* ---------- Traps & report ---------- */
+        table.list { width: 100%; border-collapse: collapse; }
+        table.list th { text-align: left; font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; padding: 0 var(--space-4); height: 34px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+        table.list td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--rule); font-size: var(--text-sm); vertical-align: middle; }
+        table.list tr:hover td { background: var(--surface-2); }
+        table.list .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .type-tag { display: inline-block; font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 2px 6px; border: 1px solid var(--rule-strong); border-radius: var(--radius); text-transform: uppercase; }
+        .t-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+        .report { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.6; white-space: pre-wrap; padding: var(--space-5); margin: 0; color: var(--ink-2); }
 
-        /* Map Container Atmospheric Glow & Vignette */
-        .radar-map-frame {
-            box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.9), 0 0 35px rgba(255, 42, 85, 0.08);
-            position: relative;
-        }
+        /* ---------- Dialog base (drawer, palette, modals) ---------- */
+        dialog { color: var(--ink); background: var(--surface); border: var(--rule-w) solid var(--ink); padding: 0; box-shadow: var(--shadow); }
+        dialog::backdrop { background: var(--scrim); }
+        .dlg-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-3) var(--space-5); background: var(--band); color: var(--band-ink); }
+        .dlg-head h2 { font-size: var(--text-md); font-weight: 800; flex: 1; }
+        .dlg-head .btn { color: var(--band-ink); border-color: var(--band-rule); }
+        .dlg-head .btn:hover { background: #1B1C1F; }
+        .dlg-body { padding: var(--space-5); display: grid; gap: var(--space-4); }
+        .dlg-foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding: var(--space-4) var(--space-5); border-top: 1px solid var(--rule); }
+        dialog.modal { width: min(520px, calc(100vw - 32px)); }
+        dialog[open].modal { animation: rise var(--dur-med) var(--ease-out); }
+        @keyframes rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 
-        #attack-map {
-            height: 420px;
-            width: 100%;
-            border-radius: calc(1rem - 2px);
-            position: relative;
-            z-index: 1;
-        }
-        .leaflet-container {
-            background: #06080d !important;
-            z-index: 1 !important;
-            font-family: 'Geist Mono', monospace !important;
-        }
-        .leaflet-pane { z-index: 2 !important; }
-        .leaflet-top, .leaflet-bottom { z-index: 3 !important; }
-        .leaflet-popup-content-wrapper {
-            background: #090d15 !important;
-            color: #f1f5f9 !important;
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            box-shadow: 0 20px 30px rgba(0, 0, 0, 0.9) !important;
-            border-radius: 0.5rem !important;
-            padding: 0 !important;
-        }
-        .leaflet-popup-tip {
-            background: #090d15 !important;
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
-        }
-        .leaflet-popup-content {
-            margin: 10px 12px !important;
-            font-size: 11px !important;
-            line-height: 1.4 !important;
-        }
+        /* ---------- Incident drawer ---------- */
+        dialog.drawer { margin: 0 0 0 auto; height: 100vh; max-height: 100vh; width: min(560px, 100vw); border: 0; border-left: var(--rule-w) solid var(--ink); display: none; flex-direction: column; }
+        dialog.drawer[open] { display: flex; animation: slide var(--dur-slow) var(--ease-out); }
+        dialog.drawer .dlg-head { border-bottom: 6px solid var(--drawer-line, var(--band-rule)); }
+        @keyframes slide { from { transform: translateX(48px); opacity: 0; } to { transform: none; opacity: 1; } }
+        .drawer-scroll { overflow-y: auto; flex: 1; }
+        .d-hero { display: flex; gap: var(--space-4); align-items: center; padding: var(--space-5); border-bottom: var(--rule-w) solid var(--rule); }
+        .d-hero .bullet { --b: 64px; font-size: 24px; }
+        .d-hero .ip { font-family: var(--font-mono); font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.02em; word-break: break-all; }
+        .d-hero .sub { color: var(--muted); font-size: var(--text-sm); }
+        .d-tags { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
+        .tag { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid var(--rule-strong); border-radius: var(--radius); font-size: var(--text-xs); font-weight: 600; color: var(--ink-2); text-decoration: none; }
+        a.tag:hover { border-color: var(--ink); color: var(--ink); }
+        .d-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); padding: var(--space-4) var(--space-5); border-bottom: var(--rule-w) solid var(--rule); }
+        .d-actions .btn { padding: 0 var(--space-2); }
+        .d-sec { padding: var(--space-5); border-bottom: 1px solid var(--rule); }
+        .d-sec h3 { font-size: var(--text-sm); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: var(--space-3); }
+        .signals { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+        .signal { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 6px; border: 1px solid var(--rule); border-radius: 15px; font-size: var(--text-xs); font-weight: 600; color: var(--faint); }
+        .signal .dot { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--ghost); }
+        .signal.on { color: var(--ink); border-color: var(--rule-strong); }
+        .signal.on .dot { box-shadow: none; background: var(--ink); }
+        .signal.on.risk .dot { background: var(--line-red); }
+        .signal.on.safe .dot { background: var(--line-grey); }
+        dl.facts { display: grid; grid-template-columns: 132px minmax(0, 1fr); margin: 0; }
+        dl.facts dt { color: var(--muted); font-size: var(--text-sm); padding: 7px 0; border-bottom: 1px solid var(--rule); }
+        dl.facts dd { margin: 0; font-size: var(--text-sm); font-variant-numeric: tabular-nums; padding: 7px 0; border-bottom: 1px solid var(--rule); word-break: break-word; }
+        dl.facts dd.mono { font-family: var(--font-mono); font-size: 12.5px; }
+        dl.facts dd.missing { color: var(--faint); }
+        #drawer-map { height: 160px; margin-top: var(--space-3); border: 1px solid var(--rule); }
+        details.headers summary { cursor: pointer; font-size: var(--text-sm); font-weight: 600; margin-top: var(--space-3); }
+        details.headers pre { font-family: var(--font-mono); font-size: 12px; background: var(--ground); border: 1px solid var(--rule); padding: var(--space-3); overflow-x: auto; max-height: 260px; margin: var(--space-3) 0 0; white-space: pre; }
 
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: #07090e; }
-        ::-webkit-scrollbar-thumb { background: #1c2436; border-radius: 2px; }
-        ::-webkit-scrollbar-thumb:hover { background: #2d374d; }
+        /* The signature: the attacker's line */
+        .line { list-style: none; margin: 0; padding: 0 0 0 64px; position: relative; }
+        .line::before { content: ""; position: absolute; left: 33px; top: 14px; bottom: 14px; width: 6px; background: var(--line-color, var(--ink)); }
+        .line li { position: relative; padding: 6px 0 14px; }
+        .line.single::before { display: none; }
+        .line li::before { content: ""; position: absolute; left: -40px; top: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); border: 5px solid var(--line-color, var(--ink)); box-sizing: border-box; }
+        .line li.xfer::before { border-color: var(--ink); width: 26px; height: 26px; left: -42px; top: 4px; }
+        .line li.current::before { background: var(--line-color, var(--ink)); }
+        .line .n { position: absolute; left: -64px; top: 8px; width: 16px; text-align: right; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--faint); }
+        .line b { font-size: var(--text-sm); font-weight: 700; }
+        .line .xfer-tag { font-size: 11px; font-weight: 700; color: var(--muted); margin-left: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .line span { display: block; font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--muted); }
+        .line button { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; text-align: left; font: inherit; }
+        .line button:hover b { text-decoration: underline; }
+        .line-summary { display: grid; grid-template-columns: repeat(3, 1fr); border-top: var(--rule-w) solid var(--ink); margin-bottom: var(--space-4); }
+        .line-summary div { padding: var(--space-3) var(--space-3) 0 0; }
+        .line-summary div + div { padding-left: var(--space-3); border-left: 1px solid var(--rule); }
+        .line-summary b { display: block; font-size: var(--text-lg); font-weight: 800; }
+        .line-summary span { font-size: var(--text-xs); color: var(--muted); }
+        .d-loading { padding: var(--space-7) var(--space-5); color: var(--muted); }
+
+        /* ---------- Command palette ---------- */
+        dialog.palette { width: min(640px, calc(100vw - 32px)); margin-top: 12vh; }
+        .palette-input { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-4); border-bottom: var(--rule-w) solid var(--rule); }
+        .palette-input input { flex: 1; height: 56px; border: 0; background: transparent; font-size: var(--text-md); outline: none; }
+        .palette-list { list-style: none; margin: 0; padding: var(--space-2); max-height: 50vh; overflow-y: auto; }
+        .palette-list .group { padding: var(--space-2) var(--space-3) 4px; font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
+        .palette-list [role="option"] { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; padding: 0 var(--space-3); cursor: pointer; font-size: var(--text-sm); }
+        .palette-list [role="option"][aria-selected="true"] { background: var(--ink); color: var(--ground); }
+        .palette-list [role="option"] .meta { margin-left: auto; font-size: var(--text-xs); color: var(--muted); }
+        .palette-list [role="option"][aria-selected="true"] .meta { color: inherit; opacity: 0.75; }
+        .palette-list .bullet { --b: 24px; font-size: 10px; }
+        .palette-empty { padding: var(--space-5); color: var(--muted); font-size: var(--text-sm); }
+
+        /* ---------- Modals content ---------- */
+        .safe-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+        .safe-list li { display: flex; align-items: center; gap: var(--space-3); padding: 10px 0; border-bottom: 1px solid var(--rule); }
+        .safe-list li code { font-weight: 600; }
+        .safe-list li span { color: var(--muted); font-size: var(--text-xs); flex: 1; }
+        .you { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--ground); border: 1px solid var(--rule); }
+        .you code { font-weight: 600; }
+        .you small { display: block; color: var(--muted); font-size: var(--text-xs); }
+        .inline-form { display: flex; gap: var(--space-2); }
+        .note { padding: var(--space-3) var(--space-4); border: 1px solid var(--rule); background: var(--ground); font-size: var(--text-sm); color: var(--ink-2); }
+        .note code { color: var(--ink); }
+        .readonly-copy { display: flex; gap: var(--space-2); }
+        .readonly-copy .input { font-family: var(--font-mono); font-size: 12px; }
+
+        /* ---------- Toasts ---------- */
+        .toasts { position: fixed; right: var(--space-5); bottom: var(--space-5); z-index: 5000; display: grid; gap: var(--space-2); width: min(380px, calc(100vw - 32px)); }
+        .toast { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); background: var(--band); color: var(--band-ink); border-left: 0; box-shadow: var(--shadow); font-size: var(--text-sm); animation: rise var(--dur-med) var(--ease-out); }
+        .toast .bullet { --b: 20px; font-size: 10px; margin-top: 1px; }
+        .toast button { margin-left: auto; background: none; border: 0; color: var(--band-muted); cursor: pointer; font-size: var(--text-xs); font-weight: 600; }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 1280px) {
+            .board-head, .dep { grid-template-columns: 36px minmax(0, 1.3fr) minmax(0, 1.2fr) 76px 68px; }
+            .col-to { display: none; }
+        }
+        @media (max-width: 1100px) {
+            .grid { grid-template-columns: 1fr; }
+            .search-trigger { min-width: 0; }
+            .search-trigger .label-text { display: none; }
+        }
+        @media (max-width: 860px) {
+            .shell { grid-template-columns: 1fr; }
+            .rail { position: static; height: auto; border-right: 0; border-bottom: var(--rule-w) solid var(--rule); padding: 0; flex-direction: row; overflow-x: auto; }
+            .rail nav { display: flex; }
+            .rail a { border-left: 0; border-bottom: 4px solid transparent; padding: 0 var(--space-4); white-space: nowrap; }
+            .rail a[aria-current="page"] { border-bottom-color: var(--ink); }
+            .rail .rail-foot { display: none; }
+            .view { padding: var(--space-5) var(--space-4) var(--space-7); }
+            .metrics { grid-template-columns: repeat(2, 1fr); }
+            .metric:nth-child(3) { padding-left: 0; border-left: 0; }
+            .metric:nth-child(n+3) { border-top: 1px solid var(--rule); }
+            .band-inner { padding-left: var(--space-4); padding-right: var(--space-4); gap: var(--space-2); }
+            .scope, .clock, .band-hide-sm { display: none; }
+            .deploy-label { display: none; }
+            .filter-input { width: 100%; }
+        }
+        @media (max-width: 600px) {
+            .board-head { display: none; }
+            .dep { grid-template-columns: 36px minmax(0, 1fr) 64px; row-gap: 2px; padding-top: var(--space-2); padding-bottom: var(--space-2); }
+            .dep .col-origin, .dep .col-actions { display: none; }
+            .dep .mob { display: block; color: var(--ink-2); }
+            .d-actions { grid-template-columns: repeat(2, 1fr); }
+            dl.facts { grid-template-columns: 110px minmax(0, 1fr); }
+            table.list .hide-sm { display: none; }
+            .wordmark span { display: none; }
+            .band .search-trigger, #deploy-btn { width: 36px; padding: 0; }
+            .band-inner { gap: 6px; }
+        }
+        @media (max-width: 400px) {
+            .wordmark b { display: none; }
+        }
+        @media print {
+            .band, .rail, .toasts, .no-print { display: none !important; }
+            .shell { display: block; }
+            body { background: #fff; color: #000; }
+        }
     </style>
 </head>
+<body>
+    <!-- Authored icon set, one stroke weight -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+            <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></symbol>
+            <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></symbol>
+            <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
+            <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+            <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></symbol>
+            <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+            <symbol id="i-block" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></symbol>
+            <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></symbol>
+            <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></symbol>
+            <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></symbol>
+            <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.2-4 4.3-6 8-6s6.8 2 8 6"/></symbol>
+            <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4H5v16h9"/><path d="M11 12h10"/><path d="M17 8l4 4-4 4"/></symbol>
+            <symbol id="i-print" viewBox="0 0 24 24"><path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8"/><path d="M7 14h10v7H7z"/></symbol>
+            <symbol id="i-board" viewBox="0 0 24 24"><path d="M3 5h18M3 12h18M3 19h18"/></symbol>
+            <symbol id="i-trap" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 20V9l6-5 6 5v11"/><circle cx="12" cy="13" r="2.5"/></symbol>
+            <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/></symbol>
+            <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+            <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></symbol>
+        </defs>
+    </svg>
 
-<body class="text-slate-200 min-h-screen antialiased selection:bg-rose-500/30 selection:text-rose-200">
-
-    <!-- Top Command Navigation Bar -->
-    <header class="sticky top-0 z-30 border-b border-white/[0.08] bg-[#07090e]/90 backdrop-blur-xl px-6 py-3 transition-all">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <!-- Brand & Titanium Emblem -->
-            <div class="flex items-center space-x-3.5">
-                <div class="w-9 h-9 rounded-lg p-[1px] bg-white/10 border border-white/10 shadow-md shadow-black flex items-center justify-center">
-                    <img src="/api/logo" alt="HoneyGrid Emblem" class="w-full h-full object-cover rounded-[7px]" onerror="this.src='/static/logo.jpg'" />
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h1 class="text-sm font-bold tracking-wider text-white flex items-center gap-2 font-mono">
-                            HONEYGRID
-                            <span class="text-[9px] font-mono tracking-widest uppercase px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400 border border-white/[0.08]">
-                                SENTINEL SOC
-                            </span>
-                        </h1>
-                    </div>
-                    <p class="text-[10px] text-slate-500 tracking-wider font-mono uppercase">
-                        Active Cyber Deception &amp; Autonomous Threat Triage
-                    </p>
-                </div>
-            </div>
-
-            <!-- Telemetry Status & Global Action Bar -->
-            <div class="flex items-center space-x-2.5">
-                <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-md bg-emerald-500/[0.06] border border-emerald-500/20 text-emerald-400 text-xs font-mono">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span class="tracking-wider text-[11px]">GRID: ARMED // ACTIVE</span>
-                </div>
-
-                <!-- Safe List Allowlist Button -->
-                <button onclick="openModal('safelist-modal')" class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] rounded-md transition-all active:scale-[0.98]" title="Manage Operator Safe List">
-                    <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                    <span>SAFE LIST</span>
-                </button>
-
-                <button onclick="refreshData()" class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-mono text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.08] hover:border-white/[0.15] rounded-md transition-all active:scale-[0.98]">
-                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span>SYNC FEED</span>
-                </button>
-
-                <!-- Button-in-Button Trailing CTA -->
-                <button onclick="openModal('token-modal')" class="inline-flex items-center justify-between pl-3 pr-1.5 py-1 rounded-md bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-white font-mono text-xs tracking-wider uppercase transition-all active:scale-[0.98] group">
-                    <span class="mr-2">DEPLOY TRAP</span>
-                    <span class="w-5 h-5 rounded bg-white/10 flex items-center justify-center text-white group-hover:translate-x-0.5 transition-transform">
-                        <svg class="w-3 h-3 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
-                        </svg>
-                    </span>
-                </button>
-
-                <!-- User Profile & Sign Out Bar -->
-                <div class="flex items-center gap-2 pl-2 border-l border-white/10">
-                    <div class="flex items-center gap-2 px-2.5 py-1 rounded-md bg-white/[0.03] border border-white/[0.06] text-xs font-mono">
-                        <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                        <span id="user-email-display" class="text-slate-300 max-w-[150px] truncate" title="Active Operator">...</span>
-                        <span id="user-role-badge" class="hidden px-1 py-0.2 text-[9px] font-bold rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">ADMIN</span>
-                    </div>
-                    <button onclick="logoutUser()" title="Sign Out of Sentinel SOC" class="p-1.5 rounded-md text-slate-400 hover:text-rose-400 bg-white/[0.03] hover:bg-rose-500/10 border border-white/[0.06] hover:border-rose-500/20 transition-all active:scale-[0.98]">
-                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                    </button>
+    <header class="band">
+        <div class="band-inner">
+            <a class="wordmark" href="/dashboard" aria-label="HoneyGrid Sentinel console">
+                <img src="/api/logo" alt="" onerror="this.src='/static/logo.jpg'" />
+                <b>HoneyGrid</b><span>Sentinel</span>
+            </a>
+            <span class="scope" id="tenant-scope-text">Your workspace</span>
+            <div class="spacer"></div>
+            <button class="btn search-trigger" type="button" id="open-palette" aria-keyshortcuts="Control+K Meta+K">
+                <span style="display:inline-flex;align-items:center;gap:8px"><svg class="icon"><use href="#i-search"/></svg><span class="label-text">Search incidents</span></span>
+                <kbd class="band-hide-sm" id="kbd-hint">Ctrl K</kbd>
+            </button>
+            <span class="clock" id="utc-clock" aria-label="Current UTC time">--:--:--<small>UTC</small></span>
+            <button class="btn icon-btn" type="button" id="refresh-btn" aria-label="Refresh now" title="Refresh now"><svg class="icon"><use href="#i-refresh"/></svg></button>
+            <button class="btn icon-btn band-hide-sm" type="button" id="theme-btn" aria-label="Switch color theme" title="Switch color theme"><svg class="icon"><use href="#i-theme"/></svg></button>
+            <button class="btn icon-btn" type="button" id="safelist-btn" aria-label="Operator safe list" title="Operator safe list"><svg class="icon"><use href="#i-shield"/></svg></button>
+            <button class="btn primary" type="button" id="deploy-btn"><svg class="icon"><use href="#i-plus"/></svg><span class="deploy-label">Deploy trap</span></button>
+            <div class="user">
+                <button class="btn icon-btn" type="button" id="user-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Account"><svg class="icon"><use href="#i-user"/></svg></button>
+                <div class="user-menu hidden" id="user-menu" role="menu">
+                    <div class="who"><b id="user-email-display">—</b><span id="user-role-badge">Operator</span></div>
+                    <button type="button" role="menuitem" id="theme-menu-btn"><svg class="icon"><use href="#i-theme"/></svg>Switch theme</button>
+                    <button type="button" role="menuitem" id="logout-btn"><svg class="icon"><use href="#i-logout"/></svg>Sign out</button>
                 </div>
             </div>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-6 py-6 space-y-5">
-
-        <!-- Multi-Tenant Scope Banner -->
-        <div id="tenant-scope-banner" class="flex items-center justify-between px-3.5 py-2 rounded-lg border border-white/[0.06] bg-[#090d15] text-xs font-mono">
-            <div class="flex items-center gap-2 text-slate-400">
-                <span class="text-emerald-400">[ TENANT // ISOLATED ]</span>
-                <span id="tenant-scope-text" class="text-slate-300">Displaying private canaries &amp; incident telemetry</span>
-            </div>
-            <div id="tenant-scope-admin-badge" class="hidden flex items-center gap-2 font-mono text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                <span>[ ⚡ MASTER ADMIN OVERRIDE ACTIVE // ALL FLEET TELEMETRY UNLOCKED ]</span>
-            </div>
-        </div>
-
-        <!-- Command KPI Metrics: High-Density Double-Bezel Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <!-- Metric 1: Deception Arsenal -->
-            <div class="hardware-shell">
-                <div class="hardware-core p-4 flex flex-col justify-between h-full">
-                    <div class="flex items-center justify-between text-slate-400 mb-1">
-                        <span class="text-[10px] font-mono tracking-widest uppercase text-slate-500">[ SENSOR // 01 ]</span>
-                        <span class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">ARMED</span>
-                    </div>
-                    <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">ACTIVE HONEYTOKENS</div>
-                    <div id="stat-tokens" class="text-2xl font-bold text-white font-mono tracking-tight my-1 tabular-nums">--</div>
-                    <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
-                        <span class="text-emerald-400">&bull;</span>
-                        <span>PDF &bull; AWS &bull; GIT &bull; ENV DEPLOYED</span>
-                    </div>
+    <div class="shell">
+        <aside class="rail" aria-label="Console sections">
+            <nav>
+                <a href="#incidents" data-view="incidents" aria-current="page"><svg class="icon"><use href="#i-board"/></svg>Incidents<span class="count" id="rail-incidents">0</span></a>
+                <a href="#traps" data-view="traps"><svg class="icon"><use href="#i-trap"/></svg>Traps<span class="count" id="token-count-badge">0</span></a>
+                <a href="#report" data-view="report"><svg class="icon"><use href="#i-doc"/></svg>Report</a>
+            </nav>
+            <div class="rail-foot">
+                <b style="color:var(--muted)">Threat lines</b>
+                <div class="legend">
+                    <div><span class="bullet red"></span>70–100 critical</div>
+                    <div><span class="bullet orange"></span>50–69 high</div>
+                    <div><span class="bullet yellow"></span>30–49 elevated</div>
+                    <div><span class="bullet green"></span>0–29 low</div>
+                    <div><span class="bullet grey"></span>safe list</div>
                 </div>
             </div>
+        </aside>
 
-            <!-- Metric 2: Intercepted Incidents -->
-            <div class="hardware-shell">
-                <div class="hardware-core p-4 flex flex-col justify-between h-full">
-                    <div class="flex items-center justify-between text-slate-400 mb-1">
-                        <span class="text-[10px] font-mono tracking-widest uppercase text-slate-500">[ SENSOR // 02 ]</span>
-                        <span class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">ALERT</span>
-                    </div>
-                    <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">SECURITY INTERCEPTIONS</div>
-                    <div id="stat-incidents" class="text-2xl font-bold text-rose-400 font-mono tracking-tight my-1 tabular-nums">--</div>
-                    <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
-                        <span class="text-rose-400">&bull;</span>
-                        <span>UNAUTHORIZED TRAPS TRIPPED</span>
-                    </div>
+        <main>
+            <!-- Incidents -->
+            <section class="view" id="view-incidents">
+                <div class="metrics" aria-label="Summary">
+                    <div class="metric"><div class="value" id="stat-tokens">0</div><div class="name">Active decoys</div><div class="cap">planted in your environment</div></div>
+                    <div class="metric"><div class="value" id="stat-incidents">0</div><div class="name">Incidents</div><div class="cap">every decoy trip recorded</div></div>
+                    <div class="metric"><div class="value" id="stat-high-threat">0</div><div class="name">High threat</div><div class="cap">score 50+ or anonymized</div></div>
+                    <div class="metric"><div class="value" id="stat-attackers">0</div><div class="name">Unique attackers</div><div class="cap">distinct source addresses</div></div>
                 </div>
-            </div>
 
-            <!-- Metric 3: Critical Threat Actors -->
-            <div class="hardware-shell">
-                <div class="hardware-core p-4 flex flex-col justify-between h-full">
-                    <div class="flex items-center justify-between text-slate-400 mb-1">
-                        <span class="text-[10px] font-mono tracking-widest uppercase text-slate-500">[ SENSOR // 03 ]</span>
-                        <span class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">THREAT</span>
-                    </div>
-                    <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">ADVERSARY THREAT INDEX</div>
-                    <div id="stat-high-threat" class="text-2xl font-bold text-amber-400 font-mono tracking-tight my-1 tabular-nums">--</div>
-                    <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
-                        <span class="text-amber-400">&bull;</span>
-                        <span>TOR &bull; VPN &bull; HOSTING SCANNERS</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Metric 4: Unmasked Attackers -->
-            <div class="hardware-shell">
-                <div class="hardware-core p-4 flex flex-col justify-between h-full">
-                    <div class="flex items-center justify-between text-slate-400 mb-1">
-                        <span class="text-[10px] font-mono tracking-widest uppercase text-slate-500">[ SENSOR // 04 ]</span>
-                        <span class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/[0.05] text-slate-300 border border-white/10">ORIGINS</span>
-                    </div>
-                    <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider">UNMASKED ADVERSARIES</div>
-                    <div id="stat-attackers" class="text-2xl font-bold text-slate-200 font-mono tracking-tight my-1 tabular-nums">--</div>
-                    <div class="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
-                        <span class="text-slate-400">&bull;</span>
-                        <span>UNIQUE IP VECTORS FINGERPRINTED</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Cockpit HUD: Global Threat Radar & Attack Map -->
-        <div class="hardware-shell">
-            <div class="hardware-core p-4 space-y-3">
-                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] pb-3">
-                    <div class="flex items-center gap-2.5">
-                        <div class="w-7 h-7 rounded bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 font-mono text-xs">
-                            ⌖
+                <div class="grid">
+                    <section class="panel" aria-labelledby="board-title">
+                        <div class="panel-bar">
+                            <h2 id="board-title">Incidents</h2>
+                            <span class="sub" id="board-sub">newest first</span>
+                            <div class="spacer"></div>
+                            <div class="chips" role="group" aria-label="Minimum threat">
+                                <button class="chip" type="button" data-min="0" aria-pressed="true">All</button>
+                                <button class="chip" type="button" data-min="30" aria-pressed="false"><span class="bullet yellow"></span>30+</button>
+                                <button class="chip" type="button" data-min="50" aria-pressed="false"><span class="bullet orange"></span>50+</button>
+                                <button class="chip" type="button" data-min="70" aria-pressed="false"><span class="bullet red"></span>70+</button>
+                            </div>
+                            <label class="sr-only" for="board-filter">Filter incidents</label>
+                            <input class="input filter-input" id="board-filter" type="search" placeholder="Filter by IP, place, ISP, token" autocomplete="off" />
                         </div>
-                        <div>
-                            <h2 class="text-xs font-bold text-white tracking-wider uppercase font-mono">
-                                [ GLOBAL THREAT TELEMETRY &bull; ATTACK RADAR ]
-                            </h2>
-                            <p class="text-[10px] text-slate-500 font-mono">Real-time geospatial origins of adversaries tripping HoneyGrid traps</p>
+                        <div class="board-head" aria-hidden="true">
+                            <span>Line</span><span>Source</span><span class="col-origin">Origin</span><span class="col-to">Decoy · tool</span><span style="text-align:right">UTC</span><span></span>
                         </div>
-                    </div>
-
-                    <!-- HUD Coordinates & Sensor Status -->
-                    <div class="flex items-center gap-2 text-xs font-mono">
-                        <button onclick="simulateIntrusionBeacon()" title="Plot simulated adversary radar beacon" class="px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 text-[10px] font-mono transition flex items-center gap-1.5 active:scale-95 shadow-sm shadow-rose-950">
-                            <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
-                            <span>⚡ SIMULATE INTRUDER</span>
-                        </button>
-                        <div class="px-2.5 py-1 rounded bg-black/60 border border-white/[0.08] text-slate-400 flex items-center gap-2 text-[11px]">
-                            <span class="text-rose-400 font-bold">RADAR HUD</span>
-                            <span id="map-coords-hud" class="text-slate-300">LAT: 20.00° / LON: 0.00°</span>
+                        <div id="incidents-table-body" role="list" aria-label="Incidents">
+                            <div class="empty"><span class="bullet ghost"></span><b>Loading incidents…</b></div>
                         </div>
-                        <span class="px-2 py-0.5 rounded bg-white/[0.04] text-slate-400 border border-white/[0.08] text-[10px]">
-                            CARTO DarkMatter
-                        </span>
+                        <div class="board-foot"><span id="sync-status">Syncing…</span><span>Refreshes every 10 s</span></div>
+                    </section>
+
+                    <div style="display:grid;gap:var(--space-6);min-width:0">
+                        <section class="panel" aria-labelledby="map-title">
+                            <div class="panel-bar">
+                                <h2 id="map-title">Attack map</h2>
+                                <span class="map-readout" id="map-coords-hud">Hover the map for coordinates</span>
+                                <button class="btn sm quiet" type="button" id="sim-btn" title="Plot a synthetic hit on the map only (not recorded)">Demo hit</button>
+                            </div>
+                            <div id="attack-map" role="application" aria-label="Map of incident origins"></div>
+                        </section>
+                        <section class="panel" aria-labelledby="origins-title">
+                            <div class="panel-bar"><h2 id="origins-title">Top origins</h2><span class="sub">by incident count</span></div>
+                            <ul class="origins" id="origins-list"><li><span class="none">No origins yet.</span></li></ul>
+                        </section>
                     </div>
                 </div>
+            </section>
 
-                <!-- Leaflet Container -->
-                <div class="relative overflow-hidden rounded-lg border border-white/[0.08] radar-map-frame">
-                    <div id="attack-map"></div>
+            <!-- Traps -->
+            <section class="view hidden" id="view-traps">
+                <div class="view-head">
+                    <div><h1>Traps</h1><p>Every decoy you have generated, and how often it has tripped.</p></div>
+                    <button class="btn primary" type="button" data-action="deploy"><svg class="icon"><use href="#i-plus"/></svg>Deploy trap</button>
                 </div>
-            </div>
-        </div>
+                <section class="panel" style="overflow-x:auto">
+                    <table class="list">
+                        <thead><tr><th>Decoy</th><th>Type</th><th class="num">Trips</th><th class="hide-sm">Created</th><th class="hide-sm">Callback</th><th></th></tr></thead>
+                        <tbody id="tokens-table-body"><tr><td colspan="6" style="color:var(--muted)">Loading traps…</td></tr></tbody>
+                    </table>
+                </section>
+            </section>
 
-        <!-- Incident Feeds, Arsenal & Executive Briefing Tabs -->
-        <div class="space-y-3">
-            <!-- Modern Segmented Pill Switcher -->
-            <div class="flex p-1 bg-black/40 border border-white/[0.06] rounded-lg w-max max-w-full overflow-x-auto">
-                <button onclick="switchTab('incidents')" id="tab-btn-incidents" class="px-3.5 py-1.5 text-xs font-mono font-semibold rounded transition-all bg-white/[0.08] text-white border border-white/[0.08] shadow-sm flex items-center gap-2">
-                    <span>[ 01 // INCIDENT FEED ]</span>
-                </button>
-                <button onclick="switchTab('tokens')" id="tab-btn-tokens" class="px-3.5 py-1.5 text-xs font-mono font-medium rounded transition-all text-slate-400 hover:text-slate-200 flex items-center gap-2">
-                    <span>[ 02 // HONEYTOKENS (<span id="token-count-badge">0</span>) ]</span>
-                </button>
-                <button onclick="switchTab('report')" id="tab-btn-report" class="px-3.5 py-1.5 text-xs font-mono font-medium rounded transition-all text-slate-400 hover:text-slate-200 flex items-center gap-2">
-                    <span>[ 03 // EXECUTIVE IR DOSSIER ]</span>
-                </button>
-            </div>
-
-            <!-- Tab 1: Incidents Feed Table -->
-            <div id="tab-incidents" class="hardware-shell">
-                <div class="hardware-core overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-xs">
-                            <thead class="bg-black/50 text-slate-500 border-b border-white/[0.06] uppercase text-[10px] font-mono tracking-wider">
-                                <tr>
-                                    <th class="p-3 font-semibold">Timestamp</th>
-                                    <th class="p-3 font-semibold">Attacker Origin</th>
-                                    <th class="p-3 font-semibold">Threat Score</th>
-                                    <th class="p-3 font-semibold">Geolocation &amp; ISP</th>
-                                    <th class="p-3 font-semibold">Hardware Fingerprint</th>
-                                    <th class="p-3 font-semibold">Tripped Token</th>
-                                    <th class="p-3 font-semibold text-right">SOAR Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="incidents-table-body" class="divide-y divide-white/[0.04] font-mono text-xs">
-                                <tr>
-                                    <td colspan="7" class="p-8 text-center text-slate-500 font-mono text-xs">
-                                        Loading incident telemetry matrix...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+            <!-- Report -->
+            <section class="view hidden" id="view-report">
+                <div class="view-head">
+                    <div><h1>Incident report</h1><p>A plain-text summary of this monitoring window, ready to print or paste.</p></div>
+                    <div style="display:flex;gap:var(--space-2)" class="no-print">
+                        <button class="btn" type="button" id="copy-report"><svg class="icon"><use href="#i-copy"/></svg>Copy</button>
+                        <button class="btn primary" type="button" onclick="window.print()"><svg class="icon"><use href="#i-print"/></svg>Print</button>
                     </div>
                 </div>
-            </div>
-
-            <!-- Tab 2: Deployed Honeytoken Arsenal -->
-            <div id="tab-tokens" class="hidden hardware-shell">
-                <div class="hardware-core overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-xs">
-                            <thead class="bg-black/50 text-slate-500 border-b border-white/[0.06] uppercase text-[10px] font-mono tracking-wider">
-                                <tr>
-                                    <th class="p-3 font-semibold">Token ID</th>
-                                    <th class="p-3 font-semibold">Type</th>
-                                    <th class="p-3 font-semibold">Label</th>
-                                    <th class="p-3 font-semibold">Triggered</th>
-                                    <th class="p-3 font-semibold">Created Date</th>
-                                    <th class="p-3 font-semibold">Canary URL / Target</th>
-                                    <th class="p-3 font-semibold text-right">Trap Deployment</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tokens-table-body" class="divide-y divide-white/[0.04] font-mono text-xs"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Tab 3: Executive IR Post-Mortem Report -->
-            <div id="tab-report" class="hidden hardware-shell">
-                <div class="hardware-core p-5 space-y-4">
-                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-3">
-                        <div>
-                            <h3 class="text-xs font-bold text-white font-mono uppercase tracking-wider">
-                                [ INCIDENT RESPONSE EXECUTIVE DOSSIER ]
-                            </h3>
-                            <p class="text-[11px] text-slate-400 font-mono">Automated breach summary, IOC inventory, and mitigation playbook</p>
-                        </div>
-                        <button onclick="window.print()" class="px-3 py-1 bg-white/[0.05] hover:bg-white/[0.1] text-xs text-white rounded border border-white/[0.1] transition-all font-mono">
-                            PRINT / EXPORT DOSSIER
-                        </button>
-                    </div>
-                    <div id="report-content" class="text-xs text-slate-300 font-mono space-y-4 bg-black/60 p-4 rounded border border-white/[0.06] whitespace-pre-wrap leading-relaxed">
-                        Loading executive briefing...
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- Modal: Operator Safe List (Properly placed inside body) -->
-    <div id="safelist-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" style="display: none;">
-        <div class="hardware-shell w-full max-w-lg">
-            <div class="hardware-core p-5 space-y-4">
-                <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
-                    <div class="flex items-center gap-2.5">
-                        <div class="w-7 h-7 rounded bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 font-mono text-xs">
-                            ✓
-                        </div>
-                        <div>
-                            <h3 class="text-xs font-bold text-white font-mono tracking-wider uppercase">[ OPERATOR SAFE LIST ]</h3>
-                            <p class="text-[11px] text-slate-400 font-sans">Suppresses false alarms and prevents accidental SOAR isolation of your IP</p>
-                        </div>
-                    </div>
-                    <button onclick="closeModal('safelist-modal')" class="text-slate-400 hover:text-white p-1 text-sm font-mono">&times;</button>
-                </div>
-
-                <div class="p-3 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/20 flex items-center justify-between text-xs">
-                    <div>
-                        <span class="text-slate-400 font-mono text-[11px]">YOUR CURRENT IP:</span>
-                        <span id="detected-client-ip" class="font-mono text-emerald-400 font-bold ml-1.5">Detecting...</span>
-                    </div>
-                    <button onclick="addCurrentIpToSafeList()" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-mono font-medium transition active:scale-95">
-                        + SAFE-LIST MY IP
-                    </button>
-                </div>
-
-                <div class="space-y-1.5">
-                    <label class="block text-xs font-medium text-slate-300 font-mono uppercase tracking-wider">Add IP Manually</label>
-                    <div class="flex gap-2">
-                        <input id="new-safe-ip" type="text" placeholder="e.g. 198.51.100.25 or 10.0.0.5" class="flex-1 bg-black/60 border border-white/[0.1] rounded p-2 text-xs font-mono text-white focus:border-rose-500 focus:outline-none" />
-                        <button onclick="addNewSafeIp()" class="px-3.5 py-1.5 bg-white/[0.08] hover:bg-white/[0.15] text-white border border-white/10 rounded text-xs font-mono transition">
-                            ADD ENTRY
-                        </button>
-                    </div>
-                </div>
-
-                <div class="space-y-2">
-                    <label class="block text-xs font-medium text-slate-300 font-mono uppercase tracking-wider">Active Safe List Entries</label>
-                    <div id="safelist-items" class="max-h-48 overflow-y-auto space-y-1 divide-y divide-white/[0.04] text-xs font-mono p-1">
-                        <div class="text-slate-500 text-center py-4">Loading safe list...</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+                <section class="panel"><pre class="report" id="report-content">Generating report…</pre></section>
+            </section>
+        </main>
     </div>
 
-    <!-- Deploy Token Modal -->
-    <div id="token-modal" style="display: none; z-index: 999999;" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
-        <div class="hardware-shell max-w-lg w-full shadow-2xl relative z-10">
-            <!-- View 1: Creation Form -->
-            <div id="modal-form-view" class="hardware-core p-6 space-y-4">
-                <div class="flex justify-between items-center border-b border-white/[0.08] pb-3">
-                    <div class="flex items-center gap-2.5">
-                        <div class="w-7 h-7 rounded bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400 font-mono text-xs">
-                            +
-                        </div>
-                        <div>
-                            <h3 class="text-xs font-bold text-white font-mono uppercase tracking-wider">[ SYNTHESIZE DECEPTION ASSET ]</h3>
-                            <p class="text-[11px] text-slate-400 font-sans">Deploy canary tripwires directly to local, cloud, or server storage</p>
-                        </div>
-                    </div>
-                    <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white p-1 text-sm font-mono">&times;</button>
+    <!-- Incident drawer -->
+    <dialog class="drawer" id="incident-drawer" aria-labelledby="drawer-title">
+        <div class="dlg-head">
+            <h2 id="drawer-title">Incident</h2>
+            <button class="btn sm" type="button" data-close aria-label="Close incident"><svg class="icon"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="drawer-scroll" id="drawer-body"><div class="d-loading">Loading incident…</div></div>
+    </dialog>
+
+    <!-- Command palette -->
+    <dialog class="palette" id="palette" aria-label="Search and commands">
+        <div class="palette-input">
+            <svg class="icon" style="color:var(--muted)"><use href="#i-search"/></svg>
+            <input id="palette-input" type="text" placeholder="Search IP, country, ISP, token, or type a command" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" />
+        </div>
+        <ul class="palette-list" id="palette-list" role="listbox"></ul>
+    </dialog>
+
+    <!-- Confirm -->
+    <dialog class="modal" id="confirm-dialog" aria-labelledby="confirm-title">
+        <div class="dlg-head"><h2 id="confirm-title">Confirm</h2></div>
+        <div class="dlg-body"><p id="confirm-text"></p></div>
+        <div class="dlg-foot">
+            <button class="btn" type="button" id="confirm-cancel">Cancel</button>
+            <button class="btn danger" type="button" id="confirm-ok">Confirm</button>
+        </div>
+    </dialog>
+
+    <!-- Safe list -->
+    <dialog class="modal" id="safelist-modal" aria-labelledby="safelist-title">
+        <div class="dlg-head">
+            <h2 id="safelist-title">Operator safe list</h2>
+            <button class="btn sm" type="button" data-close aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="dlg-body">
+            <p style="color:var(--muted)">Addresses here score zero when they trip a decoy and can never be isolated, so your own tests never lock you out.</p>
+            <div class="you">
+                <div><small>This workstation</small><code id="detected-client-ip">Detecting…</code></div>
+                <button class="btn sm" type="button" id="add-current-ip">Add this address</button>
+            </div>
+            <div class="inline-form">
+                <label class="sr-only" for="new-safe-ip">IP address to add</label>
+                <input class="input" id="new-safe-ip" type="text" placeholder="Another IP, e.g. 203.0.113.10" autocomplete="off" />
+                <button class="btn" type="button" id="add-safe-ip">Add</button>
+            </div>
+            <ul class="safe-list" id="safelist-items"></ul>
+        </div>
+    </dialog>
+
+    <!-- Deploy trap -->
+    <dialog class="modal" id="token-modal" aria-labelledby="token-title">
+        <div class="dlg-head">
+            <h2 id="token-title">Deploy a trap</h2>
+            <button class="btn sm" type="button" data-close aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+        </div>
+        <div id="modal-form-view">
+            <div class="dlg-body">
+                <div class="field">
+                    <label class="label" for="modal-type">Decoy type</label>
+                    <select id="modal-type" class="select">
+                        <option value="pdf">PDF beacon: confidential document</option>
+                        <option value="env">.env secrets: database and API keys</option>
+                        <option value="aws">AWS IAM keys: ~/.aws/credentials</option>
+                        <option value="git">Git repository: remote tripwire</option>
+                        <option value="keepass">KeePass vault: passwords.kdbx</option>
+                        <option value="web">Canary URL: link or API endpoint</option>
+                    </select>
                 </div>
-
-                <div class="space-y-3.5 text-xs font-sans">
-                    <div>
-                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Deception Trap Vector</label>
-                        <select id="modal-type" class="w-full bg-[#06080d] border border-white/[0.1] rounded p-2 text-slate-200 font-mono text-xs focus:border-rose-500 focus:outline-none transition">
-                            <option value="pdf">[ VEC // PDF ] Confidential Executive Payroll Document</option>
-                            <option value="env">[ CFG // ENV ] Production Database &amp; API Key Decoy (.env)</option>
-                            <option value="aws">[ IAM // AWS ] Cloud Credentials Trap (~/.aws/credentials)</option>
-                            <option value="git">[ REP // GIT ] Decoy Git Repository (.git/config Remote Trap)</option>
-                            <option value="keepass">[ VLT // KDBX ] Decoy Password Vault (passwords.kdbx)</option>
-                            <option value="web">[ WEB // URL ] Web Tracking Beacon / API URL</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Decoy Filename / Label</label>
-                        <input id="modal-label" type="text" placeholder="e.g. Q4_Compensation_Review_2026" class="w-full bg-[#06080d] border border-white/[0.1] rounded p-2 text-white font-mono text-xs focus:border-rose-500 focus:outline-none transition" />
-                    </div>
-
-                    <div>
-                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Placement Notes</label>
-                        <input id="modal-desc" type="text" placeholder="e.g. Planted in Finance Google Drive &amp; SMB Share" class="w-full bg-[#06080d] border border-white/[0.1] rounded p-2 text-white font-sans text-xs focus:border-rose-500 focus:outline-none transition" />
-                    </div>
+                <div class="field">
+                    <label class="label" for="modal-label">File name or label</label>
+                    <input id="modal-label" type="text" class="input" placeholder="e.g. Q4_Compensation_Review_2026" />
                 </div>
-
-                <div class="flex justify-end space-x-2 pt-3 border-t border-white/[0.08]">
-                    <button onclick="closeModal('token-modal')" class="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white rounded transition font-mono">CANCEL</button>
-                    <button id="modal-submit-btn" onclick="submitNewToken()" class="px-4 py-1.5 text-xs bg-white/[0.08] hover:bg-white/[0.14] text-white border border-white/15 rounded font-mono font-medium transition active:scale-[0.98]">
-                        GENERATE TRAP FILE
-                    </button>
+                <div class="field">
+                    <label class="label" for="modal-desc">Where you will plant it (optional)</label>
+                    <input id="modal-desc" type="text" class="input" placeholder="e.g. Finance shared drive" />
                 </div>
             </div>
-
-            <!-- View 2: Download & Placement View -->
-            <div id="modal-success-view" class="hidden hardware-core p-6 space-y-4">
-                <div class="flex justify-between items-center border-b border-white/[0.08] pb-3">
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-7 h-7 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xs font-mono">✓</span>
-                        <div>
-                            <h3 class="text-xs font-bold text-white font-mono tracking-wider uppercase">[ DECEPTION TRAP ARMED ]</h3>
-                            <p class="text-[11px] text-slate-400 font-sans">Download file and plant into target storage</p>
-                        </div>
-                    </div>
-                    <button onclick="closeModal('token-modal')" class="text-slate-400 hover:text-white p-1 text-sm font-mono">&times;</button>
-                </div>
-
-                <div class="bg-emerald-950/20 border border-emerald-500/20 rounded p-3 text-xs text-emerald-300 font-mono">
-                    The honeytoken was successfully generated. Download the trap file below and plant it in your storage to catch intruders.
-                </div>
-
-                <div class="space-y-3.5 text-xs">
-                    <div>
-                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Download Trap File:</label>
-                        <a id="modal-download-link" href="#" download class="w-full py-2 px-4 bg-white/[0.08] hover:bg-white/[0.14] text-white font-mono rounded border border-white/15 flex items-center justify-center gap-2 transition text-xs">
-                            <svg class="w-3.5 h-3.5 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                            <span>DOWNLOAD DECOY PAYLOAD</span>
-                        </a>
-                    </div>
-
-                    <div>
-                        <label class="block text-slate-400 mb-1.5 font-mono text-[11px] uppercase tracking-wider">Canary Callback Endpoint:</label>
-                        <div class="flex items-center gap-2">
-                            <input id="modal-canary-url-display" type="text" readonly class="w-full bg-[#06080d] border border-white/[0.1] rounded p-2 text-slate-300 font-mono text-[11px]" />
-                            <button onclick="copyToClipboard(document.getElementById('modal-canary-url-display').value)" class="px-3 py-2 bg-white/[0.05] hover:bg-white/[0.1] text-white rounded border border-white/[0.1] text-xs font-mono whitespace-nowrap transition">
-                                COPY
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="bg-black/50 border border-white/[0.08] rounded p-3 text-[11px] space-y-1">
-                        <div class="font-bold text-amber-400 uppercase tracking-wider text-[10px] font-mono">[ PLACEMENT GUIDANCE ]</div>
-                        <div id="modal-instructions" class="text-slate-300 leading-relaxed font-sans">
-                            Save this file into your target storage directory. When an unauthorized user or spy opens it, HoneyGrid triggers an instant alert.
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex justify-between items-center pt-3 border-t border-white/[0.08]">
-                    <button onclick="resetModalToForm()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition font-mono">+ DEPLOY ANOTHER</button>
-                    <button onclick="closeModal('token-modal')" class="px-3 py-1.5 text-xs bg-white/[0.06] hover:bg-white/[0.12] text-white rounded font-mono border border-white/[0.1] transition">CLOSE</button>
-                </div>
+            <div class="dlg-foot">
+                <button class="btn" type="button" data-close>Cancel</button>
+                <button class="btn primary" type="button" id="modal-submit-btn">Generate trap</button>
             </div>
         </div>
-    </div>
+        <div id="modal-success-view" class="hidden">
+            <div class="dlg-body">
+                <div style="display:flex;gap:var(--space-3);align-items:center"><span class="bullet green"><svg class="icon" style="stroke-width:2.5"><use href="#i-check"/></svg></span><b style="font-size:var(--text-md)">Trap armed. Download it and plant it.</b></div>
+                <a id="modal-download-link" href="#" download class="btn primary" style="width:100%"><svg class="icon"><use href="#i-download"/></svg><span id="modal-download-text">Download decoy</span></a>
+                <div class="field">
+                    <label class="label" for="modal-canary-url-display">Callback URL (keep private)</label>
+                    <div class="readonly-copy">
+                        <input id="modal-canary-url-display" type="text" readonly class="input" />
+                        <button class="btn" type="button" id="copy-canary">Copy</button>
+                    </div>
+                </div>
+                <div class="note" id="modal-instructions">Save this file where an intruder would look.</div>
+            </div>
+            <div class="dlg-foot">
+                <button class="btn" type="button" id="deploy-another">Deploy another</button>
+                <button class="btn primary" type="button" data-close>Done</button>
+            </div>
+        </div>
+    </dialog>
 
-    <!-- Scripts for Leaflet & Telemetry Sync -->
+    <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
     <script>
+        /* ================= Utilities ================= */
         function escapeHtml(str) {
             if (str === null || str === undefined) return '';
             return String(str)
@@ -660,59 +561,120 @@
             return String(str).replace(/[^a-zA-Z0-9\.\:\-_]/g, '');
         }
 
-        let map;
-        let markersLayer;
+        const $ = (id) => document.getElementById(id);
+        const isMac = /Mac|iPhone|iPad/.test(navigator.platform || '');
 
-        function initMap() {
-            map = L.map('attack-map', { 
-                attributionControl: false,
-                zoomControl: true 
-            }).setView([20, 0], 2);
+        function isSafeIncident(inc) {
+            return (inc.connection_type || '') === 'Authorized Operator Test';
+        }
+        function lineOf(inc) {
+            if (isSafeIncident(inc)) return 'grey';
+            const s = Number(inc.threat_score) || 0;
+            if (s >= 70) return 'red';
+            if (s >= 50) return 'orange';
+            if (s >= 30) return 'yellow';
+            return 'green';
+        }
+        const LINE_VAR = { red: '--line-red', orange: '--line-orange', yellow: '--line-yellow', green: '--line-green', grey: '--line-grey' };
 
-            // CARTO Basemaps Dark Matter
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_3l0n_1_cb31a2b53480eee66c2c97ae', {
-                attribution: '&copy; OpenStreetMap, &copy; CARTO',
-                subdomains: 'abcd',
-                maxZoom: 20
-            }).addTo(map);
+        function parseTs(ts) {
+            const d = new Date(ts);
+            return isNaN(d) ? null : d;
+        }
+        function utcTime(ts) {
+            const d = parseTs(ts);
+            return d ? d.toISOString().substring(11, 19) : '--:--:--';
+        }
+        function utcDateLabel(ts) {
+            const d = parseTs(ts);
+            if (!d) return '';
+            const today = new Date().toISOString().substring(0, 10);
+            const day = d.toISOString().substring(0, 10);
+            if (day === today) return 'today';
+            return day.substring(5);
+        }
+        function connShort(type) {
+            const t = (type || '').toLowerCase();
+            if (t.includes('tor')) return 'Tor exit';
+            if (t.includes('vpn') || t.includes('proxy')) return 'VPN / proxy';
+            if (t.includes('datacenter') || t.includes('vps')) return 'Datacenter';
+            if (t.includes('authorized')) return 'Safe list test';
+            if (t.includes('localhost') || t.includes('internal')) return 'Local network';
+            if (t.includes('residential')) return 'Residential ISP';
+            return type || 'Unknown';
+        }
+        function place(inc) {
+            const city = inc.geo_city && !['Unknown', 'Private Network'].includes(inc.geo_city) ? inc.geo_city : '';
+            const country = inc.geo_country && inc.geo_country !== 'Unknown' ? inc.geo_country : '';
+            return [city, country].filter(Boolean).join(', ') || 'Unknown origin';
+        }
 
-            markersLayer = L.layerGroup().addTo(map);
+        /* ================= Toasts, confirm ================= */
+        function toast(message, tone) {
+            const wrap = $('toasts');
+            const el = document.createElement('div');
+            el.className = 'toast';
+            const cls = tone === 'error' ? 'red' : tone === 'ok' ? 'green' : 'grey';
+            const glyph = tone === 'error' ? '!' : tone === 'ok' ? 'OK' : 'i';
+            el.innerHTML = `<span class="bullet ${cls}" aria-hidden="true">${glyph}</span><span>${escapeHtml(message)}</span><button type="button">Dismiss</button>`;
+            el.querySelector('button').addEventListener('click', () => el.remove());
+            wrap.appendChild(el);
+            setTimeout(() => el.remove(), tone === 'error' ? 9000 : 5000);
+        }
 
-            map.on('mousemove', function(e) {
-                const hud = document.getElementById('map-coords-hud');
-                if (hud) {
-                    hud.innerText = `LAT: ${e.latlng.lat.toFixed(2)}° / LON: ${e.latlng.lng.toFixed(2)}°`;
+        function confirmAction(title, text, okLabel) {
+            return new Promise((resolve) => {
+                const dlg = $('confirm-dialog');
+                $('confirm-title').innerText = title;
+                $('confirm-text').innerText = text;
+                $('confirm-ok').innerText = okLabel || 'Confirm';
+                const done = (v) => { cleanup(); dlg.close(); resolve(v); };
+                const ok = () => done(true);
+                const cancel = () => done(false);
+                const onClose = () => { cleanup(); resolve(false); };
+                function cleanup() {
+                    $('confirm-ok').removeEventListener('click', ok);
+                    $('confirm-cancel').removeEventListener('click', cancel);
+                    dlg.removeEventListener('cancel', onClose);
                 }
+                $('confirm-ok').addEventListener('click', ok);
+                $('confirm-cancel').addEventListener('click', cancel);
+                dlg.addEventListener('cancel', onClose);
+                dlg.showModal();
+                $('confirm-cancel').focus();
             });
         }
 
-        async function refreshData() {
-            try {
-                const statsRes = await fetch('/api/stats');
-                if (statsRes.status === 401) {
-                    window.location.href = '/login';
-                    return;
-                }
-                const stats = await statsRes.json();
-                document.getElementById('stat-tokens').innerText = stats.total_tokens;
-                document.getElementById('stat-incidents').innerText = stats.total_incidents;
-                document.getElementById('stat-high-threat').innerText = stats.high_threat_incidents;
-                document.getElementById('stat-attackers').innerText = stats.unique_attackers;
-                document.getElementById('token-count-badge').innerText = stats.total_tokens;
-
-                const incidentsRes = await fetch('/api/incidents');
-                const incidents = await incidentsRes.json();
-                renderIncidents(incidents);
-                updateMapMarkers(incidents);
-                generateExecutiveReport(stats, incidents);
-
-                const tokensRes = await fetch('/api/tokens');
-                const tokens = await tokensRes.json();
-                renderTokens(tokens);
-            } catch (e) {
-                console.error("Telemetry sync error:", e);
-            }
+        function copyToClipboard(text, label) {
+            if (!text) return;
+            navigator.clipboard.writeText(text).then(() => {
+                toast((label || 'Copied') + ' to clipboard.', 'ok');
+            }).catch(() => {
+                window.prompt('Copy this value:', text);
+            });
         }
+
+        /* ================= Theme & clock ================= */
+        function currentTheme() {
+            return document.documentElement.dataset.theme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        }
+        function toggleTheme() {
+            const next = currentTheme() === 'light' ? 'dark' : 'light';
+            document.documentElement.dataset.theme = next;
+            try { localStorage.setItem('hg-theme', next); } catch (e) {}
+            applyTiles();
+        }
+        function tickClock() {
+            $('utc-clock').innerHTML = new Date().toISOString().substring(11, 19) + '<small>UTC</small>';
+        }
+
+        /* ================= Map ================= */
+        let map;
+        let markersLayer;
+        let tileLayer;
+        let drawerMap;
+        let markersByIp = {};
+        let lastAutoFocusedId = null;
 
         const COUNTRY_COORDS = {
             'morocco': [31.7917, -7.0926], 'ma': [31.7917, -7.0926],
@@ -735,306 +697,299 @@
             'australia': [-25.2744, 133.7751], 'au': [-25.2744, 133.7751]
         };
 
-        let markersByIp = {};
-        let lastAutoFocusedId = null;
+        function coordsOf(inc) {
+            if (inc.geo_lat && inc.geo_lon) return [inc.geo_lat, inc.geo_lon];
+            const c = COUNTRY_COORDS[(inc.geo_country || '').toLowerCase().trim()];
+            if (c) return c;
+            if (inc.attacker_ip && inc.attacker_ip.startsWith('105.157.')) return [31.7917, -7.0926];
+            return null;
+        }
+
+        function tileUrl() {
+            const style = currentTheme() === 'light' ? 'light_all' : 'dark_all';
+            return `https://{s}.basemaps.cartocdn.com/rastertiles/${style}/{z}/{x}/{y}.png?key=cb1_3l0n_1_cb31a2b53480eee66c2c97ae`;
+        }
+        function applyTiles() {
+            [map, drawerMap].forEach((m) => {
+                if (!m) return;
+                m.eachLayer((l) => { if (l instanceof L.TileLayer) m.removeLayer(l); });
+                L.tileLayer(tileUrl(), { subdomains: 'abcd', maxZoom: 19 }).addTo(m);
+            });
+        }
+
+        function pinIcon(line, label, latest) {
+            return L.divIcon({
+                className: '',
+                html: `<div class="map-pin ${line}${latest ? ' latest' : ''}"><span class="bullet ${line}">${escapeHtml(label)}</span></div>`,
+                iconSize: [26, 26],
+                iconAnchor: [13, 13]
+            });
+        }
+
+        function initMap() {
+            map = L.map('attack-map', { attributionControl: false, zoomControl: true, worldCopyJump: true }).setView([24, 8], 2);
+            tileLayer = L.tileLayer(tileUrl(), { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+            markersLayer = L.layerGroup().addTo(map);
+            map.on('mousemove', (e) => {
+                $('map-coords-hud').innerText = `${e.latlng.lat.toFixed(2)}°, ${e.latlng.lng.toFixed(2)}°`;
+            });
+        }
 
         function locateOnMap(lat, lon, ip, label) {
             if (!lat || !lon) {
-                alert(`Coordinates not available for IP ${ip}`);
+                toast(`No coordinates recorded for ${ip}.`, 'error');
                 return;
             }
-            const mapEl = document.getElementById('attack-map');
-            if (mapEl) {
-                mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-            map.flyTo([lat, lon], 6, { duration: 1.2 });
+            showView('incidents');
+            $('attack-map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            map.flyTo([lat, lon], 6, { duration: 1.1 });
             const m = markersByIp[ip];
-            if (m) {
-                setTimeout(() => m.openPopup(), 1250);
-            }
-            const hud = document.getElementById('map-coords-hud');
-            if (hud) {
-                hud.innerHTML = `<span class="text-rose-400 font-bold animate-pulse">RADAR LOCK: ${escapeHtml(ip)} (${escapeHtml(label || 'Target')})</span>`;
-            }
+            if (m) setTimeout(() => m.openPopup(), 1150);
+            $('map-coords-hud').innerText = `Located ${ip}${label ? ' · ' + label : ''}`;
         }
 
         function updateMapMarkers(incidents) {
             markersLayer.clearLayers();
             markersByIp = {};
             if (!incidents || !incidents.length) return;
-
-            let latestPlotted = null;
-
-            incidents.forEach(inc => {
-                // Ensure coordinates: use country centroid fallback if GPS was unrecorded
-                if (!inc.geo_lat || !inc.geo_lon) {
-                    const cKey = (inc.geo_country || '').toLowerCase().trim();
-                    if (COUNTRY_COORDS[cKey]) {
-                        inc.geo_lat = COUNTRY_COORDS[cKey][0];
-                        inc.geo_lon = COUNTRY_COORDS[cKey][1];
-                    } else if (inc.attacker_ip && inc.attacker_ip.startsWith('105.157.')) {
-                        inc.geo_lat = 31.7917;
-                        inc.geo_lon = -7.0926;
-                        if (!inc.geo_country || inc.geo_country.includes('Localhost')) inc.geo_country = 'Morocco';
-                    }
-                }
-
-                if (inc.geo_lat && inc.geo_lon) {
-                    if (!latestPlotted) latestPlotted = inc;
-                    const colorClass = inc.threat_score >= 50 ? 'beacon-crimson' : (inc.threat_score >= 30 ? 'beacon-amber' : 'beacon-cyan');
-                    const customIcon = L.divIcon({
-                        className: 'custom-radar-pin',
-                        html: `
-                            <div class="radar-beacon-wrapper" title="${escapeHtml(inc.attacker_ip)} [${escapeHtml(inc.threat_score)}% Threat]">
-                                <div class="radar-beacon-ping ${colorClass}"></div>
-                                <div class="radar-beacon-core ${colorClass}"></div>
-                            </div>
-                        `,
-                        iconSize: [28, 28],
-                        iconAnchor: [14, 14]
-                    });
-
-                    const marker = L.marker([inc.geo_lat, inc.geo_lon], { icon: customIcon }).addTo(markersLayer);
-                    markersByIp[inc.attacker_ip] = marker;
-
-                    marker.bindPopup(`
-                        <div class="space-y-1.5 font-mono text-[11px] p-0.5">
-                            <div class="flex items-center justify-between gap-3 border-b border-white/10 pb-1.5">
-                                <div class="flex items-center gap-1.5">
-                                    <span class="w-2 h-2 rounded-full ${inc.threat_score >= 50 ? 'bg-rose-500' : 'bg-amber-400'} animate-pulse"></span>
-                                    <span class="font-bold text-white text-xs">${escapeHtml(inc.attacker_ip)}</span>
-                                </div>
-                                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono ${inc.threat_score >= 50 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}">${escapeHtml(inc.threat_score)}% THREAT</span>
-                            </div>
-                            <div class="text-slate-300 text-[11px]">📍 <strong>LOC:</strong> ${escapeHtml(inc.geo_city || 'Regional')}, ${escapeHtml(inc.geo_country)}</div>
-                            <div class="text-slate-400 text-[10px] truncate max-w-[200px]">🌐 <strong>ISP:</strong> ${escapeHtml(inc.geo_isp)} (${escapeHtml(inc.geo_asn || 'N/A')})</div>
-                            <div class="text-slate-400 text-[10px]">🛡️ <strong>TYPE:</strong> ${escapeHtml(inc.connection_type)}</div>
-                            <div class="text-slate-400 text-[10px]">🎯 <strong>TOKEN:</strong> <code class="text-rose-400">${escapeHtml(inc.token_id)}</code></div>
-                            <div class="pt-1 text-[9px] text-slate-500 flex justify-between items-center border-t border-white/5">
-                                <span>${escapeHtml(inc.timestamp.substring(0, 19))}</span>
-                                <button onclick="isolateIP('${sanitizeJsArg(inc.attacker_ip)}')" class="text-rose-400 hover:text-rose-300 text-[10px] font-bold underline">ISOLATE</button>
-                            </div>
-                        </div>
-                    `);
-                }
+            let latest = null;
+            // Oldest first so the newest pin draws on top
+            incidents.slice().reverse().forEach((inc) => {
+                const c = coordsOf(inc);
+                if (!c) return;
+                const line = lineOf(inc);
+                const isLatest = inc.id === incidents.find((i) => coordsOf(i))?.id;
+                const marker = L.marker(c, { icon: pinIcon(line, inc.threat_score, isLatest), keyboard: false, riseOnHover: true, zIndexOffset: isLatest ? 1000 : 0 }).addTo(markersLayer);
+                if (isLatest) latest = inc;
+                markersByIp[inc.attacker_ip] = marker;
+                marker.bindPopup(`
+                    <div class="pop-ip">${escapeHtml(inc.attacker_ip)}</div>
+                    <div class="pop-sub">${escapeHtml(place(inc))} · ${escapeHtml(inc.connection_type)}</div>
+                    <div class="pop-sub">Tripped ${escapeHtml(tokenLabel(inc.token_id))} at ${escapeHtml(utcTime(inc.timestamp))} UTC</div>
+                    <button class="btn sm pop-open" type="button" data-open-incident="${Number(inc.id)}">Open incident</button>
+                `);
             });
-
-            // Automatically fly to latest intrusion beacon
-            if (latestPlotted && lastAutoFocusedId !== latestPlotted.id) {
-                lastAutoFocusedId = latestPlotted.id;
-                map.flyTo([latestPlotted.geo_lat, latestPlotted.geo_lon], 5, { duration: 1.2 });
-                const m = markersByIp[latestPlotted.attacker_ip];
-                if (m) setTimeout(() => m.openPopup(), 1300);
-                const hud = document.getElementById('map-coords-hud');
-                if (hud) {
-                    hud.innerHTML = `<span class="text-rose-400 font-bold animate-pulse">RADAR DETECT: ${escapeHtml(latestPlotted.attacker_ip)} (${escapeHtml(latestPlotted.geo_city || latestPlotted.geo_country)})</span>`;
-                }
+            if (latest && lastAutoFocusedId !== latest.id) {
+                lastAutoFocusedId = latest.id;
+                const c = coordsOf(latest);
+                map.flyTo(c, 4, { duration: 1.1 });
+                $('map-coords-hud').innerText = `Latest: ${latest.attacker_ip} · ${place(latest)}`;
             }
         }
 
         function simulateIntrusionBeacon() {
             const targets = [
-                { ip: "185.220.101.5", lat: 52.52, lon: 13.405, city: "Berlin", country: "Germany", isp: "Tor Exit Relay", score: 95, type: "Tor Exit Node", tool: "Automated Exploit Probe / Python" },
-                { ip: "45.142.214.19", lat: 40.7128, lon: -74.006, city: "New York", country: "United States", isp: "DigitalOcean Datacenter", score: 85, type: "Datacenter Scanner", tool: "Nuclei / Go-http-client" },
-                { ip: "193.106.191.88", lat: 35.6762, lon: 139.6503, city: "Tokyo", country: "Japan", isp: "Tokyo Server Cluster", score: 70, type: "Commercial VPN Exit", tool: "cURL / Raw TCP Scanner" },
-                { ip: "194.26.29.112", lat: 48.8566, lon: 2.3522, city: "Paris", country: "France", isp: "OVH Datacenter Host", score: 90, type: "Brute Force Scanner", tool: "Hydra / SSH-probe" }
+                { ip: "203.0.113.42", lat: 50.11, lon: 8.68, place: "Frankfurt, Germany", score: 95, type: "Tor exit node" },
+                { ip: "198.51.100.7", lat: 52.37, lon: 4.90, place: "Amsterdam, Netherlands", score: 65, type: "Commercial VPN" },
+                { ip: "192.0.2.180", lat: 39.04, lon: -77.49, place: "Ashburn, United States", score: 50, type: "Cloud datacenter" },
+                { ip: "203.0.113.77", lat: 35.68, lon: 139.65, place: "Tokyo, Japan", score: 70, type: "Cloud datacenter" }
             ];
             const t = targets[Math.floor(Math.random() * targets.length)];
-            const colorClass = t.score >= 50 ? 'beacon-crimson' : 'beacon-amber';
-            
-            map.flyTo([t.lat, t.lon], 4, { duration: 1.2 });
-            
-            const simIcon = L.divIcon({
-                className: 'custom-radar-pin',
-                html: `
-                    <div class="radar-beacon-wrapper" title="${escapeHtml(t.ip)} [${t.score}% Threat]">
-                        <div class="radar-beacon-ping ${colorClass}"></div>
-                        <div class="radar-beacon-core ${colorClass}"></div>
-                    </div>
-                `,
-                iconSize: [28, 28],
-                iconAnchor: [14, 14]
-            });
+            const line = lineOf({ threat_score: t.score });
+            map.flyTo([t.lat, t.lon], 4, { duration: 1.1 });
+            L.marker([t.lat, t.lon], { icon: pinIcon(line, t.score, true) }).addTo(markersLayer)
+                .bindPopup(`<div class="pop-ip">${escapeHtml(t.ip)}</div><div class="pop-sub">${escapeHtml(t.place)} · ${escapeHtml(t.type)}</div><div class="pop-sub">Demo hit, not recorded</div>`)
+                .openPopup();
+            $('map-coords-hud').innerText = `Demo hit: ${t.ip} · ${t.place}`;
+        }
 
-            const marker = L.marker([t.lat, t.lon], { icon: simIcon }).addTo(markersLayer);
-            marker.bindPopup(`
-                <div class="space-y-1.5 font-mono text-[11px] p-0.5">
-                    <div class="flex items-center justify-between gap-3 border-b border-white/10 pb-1.5">
-                        <div class="flex items-center gap-1.5">
-                            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                            <span class="font-bold text-white text-xs">${escapeHtml(t.ip)}</span>
-                        </div>
-                        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono bg-rose-500/20 text-rose-300 border border-rose-500/30">${t.score}% THREAT</span>
-                    </div>
-                    <div class="text-slate-300 text-[11px]">📍 <strong>LOC:</strong> ${escapeHtml(t.city)}, ${escapeHtml(t.country)}</div>
-                    <div class="text-slate-400 text-[10px] truncate max-w-[200px]">🌐 <strong>ISP:</strong> ${escapeHtml(t.isp)}</div>
-                    <div class="text-slate-400 text-[10px]">🛡️ <strong>TYPE:</strong> ${escapeHtml(t.type)}</div>
-                    <div class="text-slate-400 text-[10px]">💻 <strong>CLIENT:</strong> ${escapeHtml(t.tool)}</div>
-                    <div class="pt-1 text-[9px] text-slate-500 flex justify-between items-center border-t border-white/5">
-                        <span>LIVE RADAR SIMULATION</span>
-                        <span class="text-rose-400 font-bold">[FLICKERING BEACON ACTIVE]</span>
-                    </div>
-                </div>
-            `).openPopup();
+        /* ================= Data sync ================= */
+        let allIncidents = [];
+        let knownMaxId = null;
+        let minScore = 0;
+        let boardQuery = '';
+        let lastStats = null;
+        let tokenLabels = {};
+        let boardLimit = 25;
+        function tokenLabel(id) { return tokenLabels[id] || id; }
 
-            const coordsHud = document.getElementById('map-coords-hud');
-            if (coordsHud) {
-                coordsHud.innerHTML = `<span class="text-rose-400 font-bold animate-pulse">RADAR DETECT: ${t.ip} (${t.city})</span>`;
+        function setMetric(id, value) {
+            const el = $(id);
+            const n = Number(value) || 0;
+            el.innerText = n.toLocaleString();
+            el.classList.toggle('zero', n === 0);
+        }
+
+        async function refreshData() {
+            try {
+                const statsRes = await fetch('/api/stats');
+                if (statsRes.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const stats = await statsRes.json();
+                lastStats = stats;
+                setMetric('stat-tokens', stats.total_tokens);
+                setMetric('stat-incidents', stats.total_incidents);
+                setMetric('stat-high-threat', stats.high_threat_incidents);
+                setMetric('stat-attackers', stats.unique_attackers);
+                $('token-count-badge').innerText = stats.total_tokens;
+                $('rail-incidents').innerText = stats.total_incidents;
+                renderOrigins(stats.top_countries || []);
+
+                const tokensRes = await fetch('/api/tokens');
+                const tokens = await tokensRes.json();
+                tokenLabels = {};
+                tokens.forEach((t) => { tokenLabels[t.id] = t.label; });
+
+                const incidentsRes = await fetch('/api/incidents?limit=200');
+                const incidents = await incidentsRes.json();
+                const maxId = incidents.length ? Math.max.apply(null, incidents.map((i) => i.id)) : 0;
+                const fresh = knownMaxId === null ? new Set() : new Set(incidents.filter((i) => i.id > knownMaxId).map((i) => i.id));
+                if (knownMaxId !== null && fresh.size) {
+                    const newest = incidents.find((i) => fresh.has(i.id));
+                    toast(`New hit: ${newest.attacker_ip} tripped ${tokenLabel(newest.token_id)} (threat ${newest.threat_score}).`, lineOf(newest) === 'red' ? 'error' : 'info');
+                }
+                knownMaxId = maxId;
+                allIncidents = incidents;
+                renderIncidents(fresh);
+                updateMapMarkers(incidents);
+                generateExecutiveReport(stats, incidents);
+
+                renderTokens(tokens);
+
+                $('sync-status').className = '';
+                $('sync-status').innerText = `Last sync ${new Date().toISOString().substring(11, 19)} UTC`;
+            } catch (e) {
+                console.error("Telemetry sync error:", e);
+                $('sync-status').className = 'sync-bad';
+                $('sync-status').innerText = 'Sync failed. Retrying in 10 s.';
             }
         }
 
-        function renderIncidents(incidents) {
-            const tbody = document.getElementById('incidents-table-body');
-            if (!incidents.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500 font-mono text-xs">No active security incidents detected. Decoys are quiet.</td></tr>';
+        function renderOrigins(rows) {
+            const list = $('origins-list');
+            if (!rows.length) {
+                list.innerHTML = '<li><span class="none">No origins yet. They appear when a decoy trips.</span></li>';
+                return;
+            }
+            const max = Math.max.apply(null, rows.map((r) => r.count));
+            list.innerHTML = rows.map((r) => `
+                <li><span>${escapeHtml(r.country)}</span><span class="bar" aria-hidden="true"><i style="width:${Math.round((r.count / max) * 100)}%"></i></span><span class="n">${escapeHtml(r.count)}</span></li>
+            `).join('');
+        }
+
+        function filteredIncidents() {
+            const q = boardQuery.trim().toLowerCase();
+            return allIncidents.filter((inc) => {
+                if (minScore && (Number(inc.threat_score) || 0) < minScore) return false;
+                if (!q) return true;
+                return [inc.attacker_ip, inc.geo_country, inc.geo_city, inc.geo_isp, inc.token_id, inc.client_tool]
+                    .some((v) => (v || '').toLowerCase().includes(q));
+            });
+        }
+
+        function renderIncidents(freshIds) {
+            const body = $('incidents-table-body');
+            const focusedId = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.id : null;
+            const rows = filteredIncidents();
+            $('board-sub').innerText = rows.length === allIncidents.length ? 'newest first' : `${rows.length} of ${allIncidents.length} shown`;
+
+            if (!allIncidents.length) {
+                body.innerHTML = `<div class="empty"><span class="bullet ghost"></span><b>The line is quiet.</b><span>No decoy has been touched yet. Deploy a trap and plant it where an intruder would look; hits appear here within seconds.</span><button class="btn primary" type="button" data-action="deploy"><svg class="icon"><use href="#i-plus"/></svg>Deploy trap</button></div>`;
+                return;
+            }
+            if (!rows.length) {
+                body.innerHTML = `<div class="empty"><span class="bullet ghost"></span><b>No incidents match.</b><span>Clear the filter or lower the threat threshold.</span></div>`;
                 return;
             }
 
-            tbody.innerHTML = incidents.map(inc => {
-                let badgeClass = "bg-white/[0.04] text-slate-300 border-white/10";
-                if (inc.threat_score >= 50) badgeClass = "bg-rose-500/15 text-rose-400 border-rose-500/30";
-                else if (inc.threat_score >= 30) badgeClass = "bg-amber-500/15 text-amber-400 border-amber-500/30";
-
+            const shown = rows.slice(0, boardLimit);
+            body.innerHTML = shown.map((inc) => {
+                const line = lineOf(inc);
                 const safeIp = sanitizeJsArg(inc.attacker_ip);
-                const gpu = inc.gpu_renderer ? `<div class="text-[10px] text-slate-400 truncate max-w-[140px]" title="${escapeHtml(inc.gpu_renderer)}">GPU: ${escapeHtml(inc.gpu_renderer.split('/')[0])}</div>` : '';
-                const lanIp = inc.local_lan_ip ? `<div class="text-[10px] text-slate-400">LAN: ${escapeHtml(inc.local_lan_ip)}</div>` : '';
-
+                const c = coordsOf(inc);
+                const locate = c ? `<button class="btn sm" type="button" data-locate="${Number(inc.id)}" aria-label="Locate ${escapeHtml(inc.attacker_ip)} on the map" title="Locate on map"><svg class="icon"><use href="#i-pin"/></svg></button>` : '';
                 return `
-                    <tr class="hover:bg-white/[0.02] transition">
-                        <td class="p-3 text-slate-400 font-mono tabular-nums">${escapeHtml(inc.timestamp.substring(11, 19))}</td>
-                        <td class="p-3 font-bold text-white font-mono">
-                            <div class="flex items-center gap-1.5">
-                                <span>${escapeHtml(inc.attacker_ip)}</span>
-                                <button onclick="copyToClipboard('${safeIp}')" title="Copy IP" class="text-slate-500 hover:text-white transition">
-                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                                </button>
-                            </div>
-                            <div class="text-[10px] text-slate-500 font-sans">${escapeHtml(inc.connection_type)}</div>
-                        </td>
-                        <td class="p-3">
-                            <span class="px-2 py-0.5 rounded text-[10px] border ${badgeClass} font-bold font-mono">${escapeHtml(inc.threat_score)}%</span>
-                        </td>
-                        <td class="p-3 font-mono">
-                            <div class="text-slate-200 text-xs">${escapeHtml(inc.geo_city || 'Local')}, ${escapeHtml(inc.geo_country)}</div>
-                            <div class="text-[10px] text-slate-500 truncate max-w-[150px] font-sans">${escapeHtml(inc.geo_isp)}</div>
-                        </td>
-                        <td class="p-3 font-mono text-xs">
-                            <div class="text-slate-300 text-[11px]">${escapeHtml(inc.client_tool)}</div>
-                            ${gpu}
-                            ${lanIp}
-                        </td>
-                        <td class="p-3">
-                            <span class="text-rose-400 font-mono text-xs">${escapeHtml(inc.token_id)}</span>
-                        </td>
-                        <td class="p-3 text-right font-mono space-x-1.5 whitespace-nowrap">
-                            ${(inc.geo_lat && inc.geo_lon) || COUNTRY_COORDS[(inc.geo_country || '').toLowerCase().trim()] || (inc.attacker_ip && inc.attacker_ip.startsWith('105.157.')) ? `
-                            <button onclick="locateOnMap(${inc.geo_lat || (inc.attacker_ip.startsWith('105.157.') ? 31.7917 : 20.0)}, ${inc.geo_lon || (inc.attacker_ip.startsWith('105.157.') ? -7.0926 : 0.0)}, '${safeIp}', '${escapeHtml(inc.geo_city || inc.geo_country)}')" class="px-2 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 rounded text-[10px] transition active:scale-[0.98]" title="Locate Attacker on Radar Map">
-                                📍 LOCATE
-                            </button>
-                            ` : ''}
-                            <button onclick="isolateIP('${safeIp}')" class="px-2 py-1 bg-white/[0.04] hover:bg-rose-500/15 border border-white/10 hover:border-rose-500/30 text-slate-300 hover:text-rose-300 rounded text-[10px] transition active:scale-[0.98]">
-                                ISOLATE IP
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
+                    <div class="dep${freshIds && freshIds.has(inc.id) ? ' fresh' : ''}${openIncidentId === inc.id ? ' selected' : ''}" role="listitem" tabindex="0" data-id="${Number(inc.id)}" aria-label="${escapeHtml(inc.attacker_ip)}, threat ${escapeHtml(inc.threat_score)}, ${escapeHtml(place(inc))}">
+                        <span class="bullet ${line}">${escapeHtml(inc.threat_score)}</span>
+                        <div style="min-width:0"><div class="ip">${escapeHtml(inc.attacker_ip)}</div><div class="sub">${escapeHtml(connShort(inc.connection_type))}</div><div class="sub mob">${escapeHtml(inc.geo_city && inc.geo_city !== 'Unknown' ? inc.geo_city : place(inc))} · ${escapeHtml(tokenLabel(inc.token_id))}</div></div>
+                        <div class="col-origin" style="min-width:0"><div class="main">${escapeHtml(place(inc))}</div><div class="sub">${escapeHtml(inc.geo_isp || '')}</div></div>
+                        <div class="col-to" style="min-width:0"><div class="main">${escapeHtml(tokenLabel(inc.token_id))}</div><div class="sub">${escapeHtml(inc.client_tool)}</div></div>
+                        <time datetime="${escapeHtml(inc.timestamp)}">${escapeHtml(utcTime(inc.timestamp))}<span>${escapeHtml(utcDateLabel(inc.timestamp))}</span></time>
+                        <div class="row-actions col-actions">
+                            ${locate}
+                            <button class="btn sm" type="button" data-isolate="${safeIp}" aria-label="Isolate ${escapeHtml(inc.attacker_ip)}" title="Isolate IP"><svg class="icon"><use href="#i-block"/></svg></button>
+                        </div>
+                    </div>`;
+            }).join('') + (rows.length > shown.length ? `<div class="board-more"><button class="btn sm" type="button" data-more>Show ${Math.min(25, rows.length - shown.length)} more</button><span>${shown.length} of ${rows.length}</span></div>` : '');
+
+            if (focusedId) {
+                const again = body.querySelector(`.dep[data-id="${sanitizeJsArg(focusedId)}"]`);
+                if (again) again.focus({ preventScroll: true });
+            }
         }
 
         function renderTokens(tokens) {
-            const tbody = document.getElementById('tokens-table-body');
+            const tbody = $('tokens-table-body');
             if (!tokens.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-500 font-mono text-xs">No deception assets deployed in your workspace. Click "Deploy Trap" to plant your first canary.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6"><div class="empty" style="padding:var(--space-6) 0"><span class="bullet ghost"></span><b>No traps yet.</b><span>Deploy your first decoy and plant it somewhere an intruder would look.</span><button class="btn primary" type="button" data-action="deploy"><svg class="icon"><use href="#i-plus"/></svg>Deploy trap</button></div></td></tr>';
                 return;
             }
             const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.is_admin);
-            tbody.innerHTML = tokens.map(t => {
+            tbody.innerHTML = tokens.map((t) => {
                 const safeTokenId = sanitizeJsArg(t.id);
-                const canaryUrl = t.metadata?.canary_url || '';
-                const ownerTag = (isAdmin && t.owner_email) ? `<div class="text-[10px] text-slate-500 font-sans">Owner: ${escapeHtml(t.owner_email)}</div>` : '';
+                const canaryUrl = (t.metadata && t.metadata.canary_url) || '';
+                const owner = (isAdmin && t.owner_email) ? `<div style="color:var(--muted);font-size:var(--text-xs)">${escapeHtml(t.owner_email)}</div>` : '';
+                const trips = Number(t.trigger_count) || 0;
                 return `
-                <tr class="hover:bg-white/[0.02] transition">
-                    <td class="p-3 text-slate-200 font-bold font-mono">
-                        <div>${escapeHtml(t.id)}</div>
-                        ${ownerTag}
-                    </td>
-                    <td class="p-3 uppercase text-[10px] font-mono">
-                        <span class="px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.08] text-amber-400">${escapeHtml(t.token_type)}</span>
-                    </td>
-                    <td class="p-3 text-white font-sans font-medium text-xs">${escapeHtml(t.label)}</td>
-                    <td class="p-3 font-bold text-rose-400 font-mono tabular-nums">${escapeHtml(t.trigger_count)}</td>
-                    <td class="p-3 text-slate-400 font-mono tabular-nums text-xs">${escapeHtml(t.created_at.substring(0, 10))}</td>
-                    <td class="p-3 text-slate-400 font-mono truncate max-w-[170px] text-xs" title="${escapeHtml(canaryUrl)}">${escapeHtml(canaryUrl || 'Tripwire')}</td>
-                    <td class="p-3 text-right space-x-1.5 whitespace-nowrap font-mono text-xs">
-                        <a href="/api/tokens/${safeTokenId}/download" download class="px-2 py-1 bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/[0.1] rounded text-[10px] inline-flex items-center gap-1 transition">
-                            DOWNLOAD
-                        </a>
-                        ${canaryUrl ? `
-                        <button onclick="copyToClipboard('${escapeHtml(canaryUrl)}')" class="px-2 py-1 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/[0.1] rounded text-[10px] inline-flex items-center gap-1 transition" title="Copy Canary URL">
-                            COPY URL
-                        </button>
-                        ` : ''}
-                    </td>
-                </tr>
-            `;
+                <tr>
+                    <td><b>${escapeHtml(t.label)}</b><div style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted)">${escapeHtml(t.id)}</div>${owner}</td>
+                    <td><span class="type-tag">${escapeHtml(t.token_type)}</span></td>
+                    <td class="num"><span class="bullet sm ${trips ? 'red' : 'ghost'}">${trips}</span></td>
+                    <td class="hide-sm" style="font-family:var(--font-mono);font-size:var(--text-xs)">${escapeHtml((t.created_at || '').substring(0, 10))}</td>
+                    <td class="hide-sm" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:var(--text-xs);color:var(--muted)" title="${escapeHtml(canaryUrl)}">${escapeHtml(canaryUrl || 'File tripwire')}</td>
+                    <td><div class="t-actions">
+                        <a class="btn sm" href="/api/tokens/${safeTokenId}/download" download><svg class="icon"><use href="#i-download"/></svg>Download</a>
+                        ${canaryUrl ? `<button class="btn sm" type="button" data-copy="${escapeHtml(canaryUrl)}" data-copy-label="Callback URL copied">Copy URL</button>` : ''}
+                    </div></td>
+                </tr>`;
             }).join('');
         }
 
         function generateExecutiveReport(stats, incidents) {
-            const iocs = Array.from(new Set(incidents.map(i => i.attacker_ip))).slice(0, 10);
+            const iocs = Array.from(new Set(incidents.map((i) => i.attacker_ip))).slice(0, 10);
+            const techniques = Array.from(new Set(incidents.map((i) => i.mitre_technique).filter(Boolean)));
             const content = `
-================================================================================
-HONEYGRID SENTINEL &bull; INCIDENT RESPONSE POST-MORTEM REPORT
-Classification: STRICTLY CONFIDENTIAL // INTERNAL SOC AUDIT
-Generated: ${new Date().toUTCString()}
-================================================================================
+HONEYGRID SENTINEL · INCIDENT REPORT
+Generated ${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC
 
-1. EXECUTIVE SUMMARY
---------------------------------------------------------------------------------
-Over the current monitoring window, HoneyGrid deployed ${stats.total_tokens} deceptive assets
-across network endpoints, internal filesystems, and credential stores.
+1. SUMMARY
+${stats.total_tokens} decoys deployed. ${stats.total_incidents} decoy trips recorded from ${stats.unique_attackers} distinct addresses.
+${stats.high_threat_incidents} trips scored 50 or higher, or came through a VPN, proxy or Tor.
 
-A total of ${stats.total_incidents} unauthorized intrusion / reconnaissance attempts were detected,
-originating from ${stats.unique_attackers} distinct external and internal IP vectors.
-${stats.high_threat_incidents} events exhibited advanced adversary indicators (commercial VPNs,
-Tor routing, or automated vulnerability scanning tools).
+2. INDICATORS OF COMPROMISE (latest ${iocs.length} addresses)
+${iocs.length ? iocs.map((ip) => '  ' + ip).join('\n') : '  None recorded'}
 
-2. INDICATORS OF COMPROMISE (IOCs)
---------------------------------------------------------------------------------
-Adversary Network Origins:
-${iocs.length ? iocs.map(ip => `  • ${ip}`).join('\n') : '  • None detected'}
+3. MITRE ATT&CK TECHNIQUES OBSERVED
+${techniques.length ? techniques.map((t) => '  ' + t).join('\n') : '  None recorded'}
 
-MITRE ATT&CK Framework Mapping:
-  • T1552.001 - Unsecured Credentials in Files (.env / AWS IAM)
-  • T1083 - File and Directory Discovery
-  • T1082 - System Information Discovery
-  • T1071 - Application Layer Protocol
+4. TOP ORIGINS
+${(stats.top_countries || []).length ? stats.top_countries.map((c) => '  ' + c.country + ': ' + c.count).join('\n') : '  None recorded'}
 
-3. INCIDENT ROOT CAUSE & EXPLOITATION MECHANICS
---------------------------------------------------------------------------------
-Adversary actors initiated unauthorized read or API operations against canary
-traps. The Sentinel deception listener intercepted all inbound requests,
-extracting unmasked IP addresses, WebGL GPU fingerprints, and WebRTC local LAN
-interfaces without revealing surveillance mechanisms to the attacker.
-
-4. REMEDIATION & ACTIVE CONTAINMENT DIRECTIVES
---------------------------------------------------------------------------------
-[x] SOAR Windows Firewall containment playbook executed for high-threat IPs.
-[x] Decoy credentials rotated and adjacent authentication logs flagged for triage.
-[x] Recommended enterprise multi-factor authentication (MFA) enforcement.
+5. RECOMMENDED ACTIONS
+  - Isolate high-threat addresses not already contained.
+  - Rotate any real credentials stored near tripped decoys.
+  - Review authentication logs adjacent to each trip window.
             `;
-            document.getElementById('report-content').innerText = content.trim();
+            $('report-content').innerText = content.trim();
         }
 
+        /* ================= Containment & safe list ================= */
         async function isolateIP(ip) {
-            if (!confirm(`Trigger SOAR containment playbook to block ${ip} via Windows Firewall?`)) return;
-            const res = await fetch('/api/contain/isolate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ip: ip })
-            });
-            const data = await res.json();
-            alert(data.message);
+            const ok = await confirmAction('Isolate address', `Block ${ip} with a host firewall rule? The block applies to the machine running HoneyGrid.`, 'Isolate');
+            if (!ok) return;
+            try {
+                const res = await fetch('/api/contain/isolate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip: ip })
+                });
+                const data = await res.json();
+                toast(data.message || (res.ok ? `Isolation requested for ${ip}.` : 'Isolation failed.'), res.ok && data.status !== 'error' ? 'ok' : 'error');
+            } catch (e) {
+                toast('Could not reach the server to isolate ' + ip + '.', 'error');
+            }
         }
 
         let detectedClientIp = '';
@@ -1045,25 +1000,17 @@ interfaces without revealing surveillance mechanisms to the attacker.
                 if (!res.ok) return;
                 const data = await res.json();
                 detectedClientIp = data.client_ip || '';
-                const el = document.getElementById('detected-client-ip');
-                if (el) el.innerText = detectedClientIp + (data.is_client_safe ? ' [SAFE]' : ' [UNLISTED]');
+                $('detected-client-ip').innerText = detectedClientIp + (data.is_client_safe ? ' · on the list' : '');
+                $('add-current-ip').disabled = !!data.is_client_safe;
 
-                const container = document.getElementById('safelist-items');
-                if (!container) return;
+                const container = $('safelist-items');
                 if (!data.safe_ips || !data.safe_ips.length) {
-                    container.innerHTML = '<div class="text-slate-500 text-center py-3">No custom safe-listed IPs. Localhost is protected by default.</div>';
+                    container.innerHTML = '<li><span>No addresses yet. Localhost is always protected.</span></li>';
                     return;
                 }
-                container.innerHTML = data.safe_ips.map(item => `
-                    <div class="flex items-center justify-between py-2 px-1 hover:bg-white/[0.02] rounded">
-                        <div>
-                            <span class="text-emerald-400 font-bold font-mono">${escapeHtml(item.ip)}</span>
-                            <span class="text-slate-400 text-[11px] font-sans ml-2">${escapeHtml(item.label)}</span>
-                        </div>
-                        <button onclick="removeSafeIp('${sanitizeJsArg(item.ip)}')" class="text-rose-400 hover:text-rose-300 text-xs px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition font-mono">
-                            REMOVE
-                        </button>
-                    </div>
+                container.innerHTML = data.safe_ips.map((item) => `
+                    <li><span class="bullet sm grey" aria-hidden="true"></span><code>${escapeHtml(item.ip)}</code><span>${escapeHtml(item.label)}</span>
+                    <button class="btn sm" type="button" data-remove-safe="${sanitizeJsArg(item.ip)}">Remove</button></li>
                 `).join('');
             } catch (e) {
                 console.error("Safe list fetch error:", e);
@@ -1076,14 +1023,17 @@ interfaces without revealing surveillance mechanisms to the attacker.
         }
 
         async function addNewSafeIp() {
-            const input = document.getElementById('new-safe-ip');
-            const ip = input ? input.value.trim() : '';
+            const input = $('new-safe-ip');
+            const ip = input.value.trim();
             if (!ip) {
-                alert('Please enter an IP address');
+                input.setAttribute('aria-invalid', 'true');
+                input.focus();
+                toast('Enter an IP address to add.', 'error');
                 return;
             }
+            input.removeAttribute('aria-invalid');
             await addIpToSafeList(ip, 'Manual Safe List Entry');
-            if (input) input.value = '';
+            input.value = '';
         }
 
         async function addIpToSafeList(ip, label) {
@@ -1094,36 +1044,47 @@ interfaces without revealing surveillance mechanisms to the attacker.
                     body: JSON.stringify({ ip: ip, label: label })
                 });
                 const data = await res.json();
-                alert(data.message);
+                toast(data.message || 'Safe list updated.', res.ok ? 'ok' : 'error');
                 fetchSafeList();
+                if (openIncidentId) openIncident(openIncidentId, true);
             } catch (e) {
-                alert('Failed to add IP to safe list: ' + e.message);
+                toast('Could not add to the safe list: ' + e.message, 'error');
             }
         }
 
         async function removeSafeIp(ip) {
-            if (!confirm(`Remove ${ip} from the Operator Safe List?`)) return;
+            const ok = await confirmAction('Remove from safe list', `Remove ${ip}? Future trips from it will be scored and can be isolated.`, 'Remove');
+            if (!ok) return;
             try {
-                const res = await fetch('/api/safelist/remove', {
+                await fetch('/api/safelist/remove', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ip: ip })
                 });
-                const data = await res.json();
+                toast(`${ip} removed from the safe list.`, 'ok');
                 fetchSafeList();
             } catch (e) {
-                alert('Error removing IP: ' + e.message);
+                toast('Could not remove the address: ' + e.message, 'error');
             }
         }
 
-        async function submitNewToken() {
-            const submitBtn = document.getElementById('modal-submit-btn');
-            submitBtn.disabled = true;
-            submitBtn.innerText = 'SYNTHESIZING TRAP...';
+        /* ================= Deploy trap ================= */
+        const PLACEMENT = {
+            pdf: ['Download canary PDF', 'Save it in Documents, OneDrive or a shared drive. Opening it in a PDF reader reports the reader\'s address and triggers an alert.'],
+            env: ['Download decoy .env', 'Drop it into a project folder or backup archive. Any attempt to use its database or sync URL trips the alarm.'],
+            aws: ['Download AWS credentials', 'Save it as <code>~/.aws/credentials</code>. Infostealers and insiders hunting for cloud keys trip it immediately.'],
+            git: ['Download Git decoy (.zip)', 'Extract it into a dev workspace. A <code>git fetch</code> or <code>git pull</code> against its remote trips the trap.'],
+            keepass: ['Download KeePass vault', 'Place <code>passwords.kdbx</code> on a desktop or file share. Inspecting the vault alerts the SOC.'],
+            web: ['Download canary shortcut', 'Embed the callback URL in wikis, tickets or confidential docs. Anyone who follows it is fingerprinted.']
+        };
 
-            const type = document.getElementById('modal-type').value;
-            const label = document.getElementById('modal-label').value || `Decoy-${type.toUpperCase()}`;
-            const desc = document.getElementById('modal-desc').value || '';
+        async function submitNewToken() {
+            const submitBtn = $('modal-submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Generating…';
+            const type = $('modal-type').value;
+            const label = $('modal-label').value || `Decoy-${type.toUpperCase()}`;
+            const desc = $('modal-desc').value || '';
             try {
                 const res = await fetch('/api/tokens/create', {
                     method: 'POST',
@@ -1135,112 +1096,340 @@ interfaces without revealing surveillance mechanisms to the attacker.
                     showModalSuccess(data);
                     refreshData();
                 } else {
-                    alert('Failed to generate decoy: ' + (data.message || 'Unknown error'));
+                    toast('Could not generate the decoy: ' + (data.message || 'unknown error'), 'error');
                 }
             } catch (e) {
-                alert('Error generating token: ' + e.message);
+                toast('Could not generate the decoy: ' + e.message, 'error');
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.innerText = 'GENERATE TRAP FILE';
+                submitBtn.innerText = 'Generate trap';
             }
         }
 
         function showModalSuccess(data) {
-            document.getElementById('modal-form-view').classList.add('hidden');
-            document.getElementById('modal-success-view').classList.remove('hidden');
-
-            const dlLink = document.getElementById('modal-download-link');
-            dlLink.href = data.download_url;
-
-            const canaryDisplay = document.getElementById('modal-canary-url-display');
-            canaryDisplay.value = data.canary_url || '';
-
-            const instructionsEl = document.getElementById('modal-instructions');
-            const tokenType = (data.token.token_type || '').toLowerCase();
-
-            if (tokenType.includes('pdf')) {
-                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Save this PDF in your local <code>Documents</code> folder, OneDrive, or Google Drive. When an unauthorized user or spy opens it, HoneyGrid immediately tracks their IP, unmasks their ISP &amp; location, and triggers a Discord SOC alert.`;
-                dlLink.innerHTML = `<span>DOWNLOAD CANARY PDF (${escapeHtml(data.token.label)}.pdf)</span>`;
-            } else if (tokenType.includes('env')) {
-                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Drop this <code>.env</code> file in a project folder or backup archive. When an adversary extracts or inspects it, any attempt to verify the database or sync URL trips the alarm.`;
-                dlLink.innerHTML = `<span>DOWNLOAD DECOY .ENV FILE</span>`;
-            } else if (tokenType.includes('aws')) {
-                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Save as <code>~/.aws/credentials</code>. Automated bots, infostealers, or malicious insiders searching for AWS secrets will trip the canary immediately.`;
-                dlLink.innerHTML = `<span>DOWNLOAD AWS CREDENTIALS FILE</span>`;
-            } else if (tokenType.includes('git')) {
-                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Extract this archive into your dev workspace. If anyone runs <code>git pull</code> or <code>git fetch</code>, the remote origin canary trips the trap.`;
-                dlLink.innerHTML = `<span>DOWNLOAD GIT DECOY (.ZIP)</span>`;
-            } else if (tokenType.includes('keepass')) {
-                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Place this <code>passwords.kdbx</code> database on your Desktop or file share. Any attempt to inspect or open this fake password vault alerts the SOC.`;
-                dlLink.innerHTML = `<span>DOWNLOAD KEEPASS VAULT (.KDBX)</span>`;
-            } else {
-                instructionsEl.innerHTML = `<strong>📁 Placement:</strong> Embed this Canary URL inside corporate wikis, internal tickets, or confidential documents. Any click logs the visitor's hardware &amp; network telemetry.`;
-                dlLink.innerHTML = `<span>DOWNLOAD CANARY SHORTCUT</span>`;
-            }
+            $('modal-form-view').classList.add('hidden');
+            $('modal-success-view').classList.remove('hidden');
+            $('modal-download-link').href = data.download_url;
+            $('modal-canary-url-display').value = data.canary_url || '';
+            const type = (data.token.token_type || '').toLowerCase();
+            const key = Object.keys(PLACEMENT).find((k) => type.includes(k)) || 'web';
+            $('modal-download-text').innerText = PLACEMENT[key][0];
+            $('modal-instructions').innerHTML = PLACEMENT[key][1];
         }
 
         function resetModalToForm() {
-            document.getElementById('modal-form-view').classList.remove('hidden');
-            document.getElementById('modal-success-view').classList.add('hidden');
-            document.getElementById('modal-label').value = '';
-            document.getElementById('modal-desc').value = '';
+            $('modal-form-view').classList.remove('hidden');
+            $('modal-success-view').classList.add('hidden');
+            $('modal-label').value = '';
+            $('modal-desc').value = '';
         }
 
-        function copyToClipboard(text) {
-            if (!text) return;
-            navigator.clipboard.writeText(text).then(() => {
-                alert('Copied to clipboard: ' + text);
-            }).catch(() => {
-                prompt('Copy value:', text);
+        /* ================= Views ================= */
+        function showView(name) {
+            ['incidents', 'traps', 'report'].forEach((v) => {
+                $('view-' + v).classList.toggle('hidden', v !== name);
             });
-        }
-
-        function switchTab(tab) {
-            ['incidents', 'tokens', 'report'].forEach(t => {
-                document.getElementById(`tab-${t}`).classList.add('hidden');
-                document.getElementById(`tab-btn-${t}`).className = "px-3.5 py-1.5 text-xs font-mono font-medium rounded transition-all text-slate-400 hover:text-slate-200 flex items-center gap-2";
+            document.querySelectorAll('.rail a').forEach((a) => {
+                if (a.dataset.view === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
             });
-            document.getElementById(`tab-${tab}`).classList.remove('hidden');
-            document.getElementById(`tab-btn-${tab}`).className = "px-3.5 py-1.5 text-xs font-mono font-semibold rounded transition-all bg-white/[0.08] text-white border border-white/[0.08] shadow-sm flex items-center gap-2";
+            if (name === 'incidents' && map) setTimeout(() => map.invalidateSize(), 50);
         }
+        // Kept for compatibility with older links
+        function switchTab(tab) { showView(tab === 'tokens' ? 'traps' : tab); }
 
         function openModal(id) {
-            const el = document.getElementById(id);
-            if (el) {
-                if (id === 'token-modal') resetModalToForm();
-                if (id === 'safelist-modal') fetchSafeList();
-                el.style.display = 'flex';
-            }
+            const el = $(id);
+            if (!el) return;
+            if (id === 'token-modal') resetModalToForm();
+            if (id === 'safelist-modal') fetchSafeList();
+            el.showModal();
         }
         function closeModal(id) {
-            const el = document.getElementById(id);
-            if (el) el.style.display = 'none';
+            const el = $(id);
+            if (el && el.open) el.close();
         }
 
+        /* ================= Incident drawer ================= */
+        let openIncidentId = null;
+        let openIncidentData = null;
+
+        function mitreLink(technique) {
+            const m = /T\d{4}(?:\.\d{3})?/.exec(technique || '');
+            if (!m) return null;
+            return 'https://attack.mitre.org/techniques/' + m[0].replace('.', '/') + '/';
+        }
+
+        function fact(label, value, mono) {
+            const has = value !== null && value !== undefined && value !== '' && value !== 'Unknown';
+            return `<dt>${escapeHtml(label)}</dt><dd class="${mono ? 'mono' : ''}${has ? '' : ' missing'}">${has ? escapeHtml(value) : 'Not captured'}</dd>`;
+        }
+
+        async function openIncident(id, keepScroll) {
+            id = Number(id);
+            if (!id) return;
+            const dlg = $('incident-drawer');
+            const body = $('drawer-body');
+            openIncidentId = id;
+            document.querySelectorAll('.dep.selected').forEach((r) => r.classList.remove('selected'));
+            const row = document.querySelector(`.dep[data-id="${id}"]`);
+            if (row) row.classList.add('selected');
+            if (!keepScroll) body.innerHTML = '<div class="d-loading">Loading incident…</div>';
+            if (!dlg.open) dlg.showModal();
+            try { history.replaceState(null, '', '#incident=' + id); } catch (e) {}
+
+            try {
+                const res = await fetch('/api/incidents/' + id);
+                if (res.status === 401) { window.location.href = '/login'; return; }
+                if (!res.ok) {
+                    body.innerHTML = `<div class="d-loading"><b>Incident not found.</b><br>It may belong to another workspace or have been removed.</div>`;
+                    return;
+                }
+                const data = await res.json();
+                if (openIncidentId !== id) return;
+                openIncidentData = data;
+                renderDrawer(data);
+            } catch (e) {
+                body.innerHTML = `<div class="d-loading"><b>Could not load this incident.</b><br>${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        function renderDrawer(data) {
+            const inc = data.incident;
+            const sum = data.summary;
+            const line = sum.is_safelisted ? 'grey' : lineOf(inc);
+            const color = `var(${LINE_VAR[line]})`;
+            const mitre = mitreLink(inc.mitre_technique);
+            const c = coordsOf(inc);
+            $('drawer-title').innerText = 'Incident #' + inc.id;
+            $('incident-drawer').style.setProperty('--drawer-line', color);
+
+            const signals = data.signals.map((s) => {
+                const risk = ['tor', 'vpn', 'datacenter', 'scripted'].includes(s.key);
+                return `<span class="signal${s.active ? ' on' : ''}${s.active && risk ? ' risk' : ''}${s.active && s.key === 'safelisted' ? ' safe' : ''}"><span class="dot" aria-hidden="true"></span>${escapeHtml(s.label)}<span class="sr-only">${s.active ? ' (present)' : ' (absent)'}</span></span>`;
+            }).join('');
+
+            let prevToken = null;
+            const stops = data.timeline.map((t, i) => {
+                const isXfer = prevToken !== null && t.token_id !== prevToken;
+                prevToken = t.token_id;
+                const isCurrent = t.id === inc.id;
+                return `<li class="${isXfer ? 'xfer' : ''}${isCurrent ? ' current' : ''}">
+                    <span class="n">${i + 1}</span>
+                    <button type="button" data-open-incident="${Number(t.id)}" ${isCurrent ? 'aria-current="true"' : ''}><b>${escapeHtml(tokenLabel(t.token_id))}</b>${isXfer ? '<span class="xfer-tag">transfer</span>' : ''}</button>
+                    <span>${escapeHtml(utcDateLabel(t.timestamp))} ${escapeHtml(utcTime(t.timestamp))} · ${escapeHtml(t.http_method || 'GET')} · ${escapeHtml(t.client_tool)} · ${escapeHtml(t.threat_score)}</span>
+                </li>`;
+            }).join('');
+
+            const headers = inc.raw_headers ? Object.keys(inc.raw_headers).sort().map((k) => `${k}: ${inc.raw_headers[k]}`).join('\n') : '';
+
+            $('drawer-body').innerHTML = `
+                <div class="d-hero">
+                    <span class="bullet ${line}">${escapeHtml(inc.threat_score)}</span>
+                    <div style="min-width:0">
+                        <div class="ip">${escapeHtml(inc.attacker_ip)}</div>
+                        <div class="sub">${escapeHtml(place(inc))} · ${escapeHtml(inc.connection_type)}</div>
+                        <div class="d-tags">
+                            ${sum.is_safelisted ? '<span class="tag"><span class="bullet sm grey" style="--b:12px"></span>On safe list</span>' : ''}
+                            ${mitre ? `<a class="tag" href="${escapeHtml(mitre)}" target="_blank" rel="noopener noreferrer">${escapeHtml(inc.mitre_technique)}</a>` : `<span class="tag">${escapeHtml(inc.mitre_technique)}</span>`}
+                        </div>
+                    </div>
+                </div>
+                <div class="d-actions">
+                    <button class="btn sm danger" type="button" data-isolate="${sanitizeJsArg(inc.attacker_ip)}" ${sum.is_safelisted ? 'disabled title="Safelisted addresses cannot be isolated"' : ''}><svg class="icon"><use href="#i-block"/></svg>Isolate</button>
+                    <button class="btn sm" type="button" data-safelist="${sanitizeJsArg(inc.attacker_ip)}" ${sum.is_safelisted ? 'disabled' : ''}><svg class="icon"><use href="#i-shield"/></svg>Safelist</button>
+                    <button class="btn sm" type="button" data-copy-ioc><svg class="icon"><use href="#i-copy"/></svg>Copy IOC</button>
+                    <button class="btn sm" type="button" data-copy-json><svg class="icon"><use href="#i-copy"/></svg>JSON</button>
+                </div>
+
+                <section class="d-sec" style="--line-color:${color}">
+                    <h3>This attacker's line</h3>
+                    <div class="line-summary">
+                        <div><b>${escapeHtml(sum.hit_count)}</b><span>hits from this address</span></div>
+                        <div><b>${escapeHtml(sum.tokens_touched.length)}</b><span>decoys touched</span></div>
+                        <div><b>${escapeHtml(utcTime(sum.first_seen))}</b><span>first seen ${escapeHtml(utcDateLabel(sum.first_seen))}</span></div>
+                    </div>
+                    <ol class="line${data.timeline.length < 2 ? ' single' : ''}" aria-label="Hits from this address, oldest first">${stops}</ol>
+                </section>
+
+                <section class="d-sec">
+                    <h3>Why this score</h3>
+                    <div class="signals">${signals}</div>
+                </section>
+
+                <section class="d-sec">
+                    <h3>Origin</h3>
+                    <dl class="facts">
+                        ${fact('Place', place(inc))}
+                        ${fact('Region', inc.geo_region)}
+                        ${fact('ISP', inc.geo_isp)}
+                        ${fact('ASN', inc.geo_asn, true)}
+                        ${fact('Coordinates', c ? c[0].toFixed(3) + ', ' + c[1].toFixed(3) : '', true)}
+                    </dl>
+                    ${c ? `<div id="drawer-map" aria-label="Origin map"></div><div style="margin-top:var(--space-3)"><button class="btn sm" type="button" data-locate="${Number(inc.id)}"><svg class="icon"><use href="#i-pin"/></svg>Show on attack map</button></div>` : ''}
+                </section>
+
+                <section class="d-sec">
+                    <h3>Device fingerprint</h3>
+                    <dl class="facts">
+                        ${fact('Client tool', inc.client_tool)}
+                        ${fact('GPU', inc.gpu_renderer)}
+                        ${fact('Screen', inc.screen_res)}
+                        ${fact('CPU cores', inc.cpu_cores)}
+                        ${fact('Memory', inc.device_memory ? inc.device_memory + ' GB' : '')}
+                        ${fact('LAN address', inc.local_lan_ip, true)}
+                        ${fact('Timezone', inc.client_timezone)}
+                        ${fact('Platform', inc.client_platform)}
+                        ${fact('User agent', inc.user_agent)}
+                    </dl>
+                </section>
+
+                <section class="d-sec">
+                    <h3>Request</h3>
+                    <dl class="facts">
+                        ${fact('Decoy', tokenLabel(inc.token_id) + (tokenLabel(inc.token_id) !== inc.token_id ? ' (' + inc.token_id + ')' : ''))}
+                        ${fact('Time', inc.timestamp ? new Date(inc.timestamp).toISOString().replace('T', ' ').substring(0, 19) + ' UTC' : '')}
+                        ${fact('Method', inc.http_method)}
+                        ${fact('Path', inc.request_path, true)}
+                        ${fact('Query', inc.query_params, true)}
+                    </dl>
+                    ${headers ? `<details class="headers"><summary>Raw headers (${Object.keys(inc.raw_headers).length})</summary><pre>${escapeHtml(headers)}</pre></details>` : ''}
+                </section>
+            `;
+
+            if (drawerMap) { drawerMap.remove(); drawerMap = null; }
+            if (c) {
+                drawerMap = L.map('drawer-map', { attributionControl: false, zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false }).setView(c, 4);
+                L.tileLayer(tileUrl(), { subdomains: 'abcd', maxZoom: 19 }).addTo(drawerMap);
+                L.marker(c, { icon: pinIcon(line, inc.threat_score, false), keyboard: false }).addTo(drawerMap);
+                setTimeout(() => drawerMap && drawerMap.invalidateSize(), 60);
+            }
+        }
+
+        function closeDrawer() {
+            const dlg = $('incident-drawer');
+            if (dlg.open) dlg.close();
+        }
+
+        function onDrawerClosed() {
+            openIncidentId = null;
+            openIncidentData = null;
+            $('incident-drawer').style.removeProperty('--drawer-line');
+            document.querySelectorAll('.dep.selected').forEach((r) => r.classList.remove('selected'));
+            if (drawerMap) { drawerMap.remove(); drawerMap = null; }
+            try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+        }
+
+        function iocText(inc) {
+            return [
+                'IP: ' + inc.attacker_ip,
+                'Threat score: ' + inc.threat_score,
+                'Connection: ' + inc.connection_type,
+                'ASN: ' + (inc.geo_asn || 'Unknown') + ' / ISP: ' + (inc.geo_isp || 'Unknown'),
+                'Origin: ' + place(inc),
+                'User agent: ' + (inc.user_agent || 'None'),
+                'Decoy: ' + inc.token_id + ' at ' + inc.timestamp,
+                'MITRE: ' + inc.mitre_technique
+            ].join('\n');
+        }
+
+        /* ================= Command palette ================= */
+        const COMMANDS = [
+            { label: 'Deploy trap', meta: 'New decoy', run: () => openModal('token-modal') },
+            { label: 'Operator safe list', meta: 'Allowlist', run: () => openModal('safelist-modal') },
+            { label: 'Refresh now', meta: 'Sync', run: () => refreshData() },
+            { label: 'Go to incidents', meta: 'View', run: () => showView('incidents') },
+            { label: 'Go to traps', meta: 'View', run: () => showView('traps') },
+            { label: 'Go to report', meta: 'View', run: () => showView('report') },
+            { label: 'Switch theme', meta: 'Display', run: () => toggleTheme() },
+            { label: 'Sign out', meta: 'Account', run: () => logoutUser() }
+        ];
+        let paletteItems = [];
+        let paletteIndex = 0;
+        let paletteTimer = null;
+        let paletteSeq = 0;
+
+        function openPalette() {
+            const dlg = $('palette');
+            if (!dlg.open) dlg.showModal();
+            $('palette-input').value = '';
+            renderPalette('', []);
+            $('palette-input').focus();
+        }
+
+        function renderPalette(q, remote) {
+            const ql = q.trim().toLowerCase();
+            const cmds = COMMANDS.filter((c) => !ql || c.label.toLowerCase().includes(ql));
+            const local = ql ? allIncidents.filter((i) => [i.attacker_ip, i.geo_country, i.geo_city, i.geo_isp, i.token_id].some((v) => (v || '').toLowerCase().includes(ql))) : allIncidents.slice(0, 5);
+            const seen = new Set();
+            const incs = local.concat(remote || []).filter((i) => !seen.has(i.id) && seen.add(i.id)).slice(0, 8);
+            paletteItems = [];
+            let html = '';
+            if (incs.length) {
+                html += `<li class="group" role="presentation">${ql ? 'Incidents' : 'Latest incidents'}</li>`;
+                incs.forEach((inc) => {
+                    const idx = paletteItems.push({ run: () => openIncident(inc.id) }) - 1;
+                    html += `<li role="option" id="pal-${idx}" data-idx="${idx}" aria-selected="false"><span class="bullet ${lineOf(inc)}">${escapeHtml(inc.threat_score)}</span><span class="mono">${escapeHtml(inc.attacker_ip)}</span><span class="meta">${escapeHtml(place(inc))} · ${escapeHtml(tokenLabel(inc.token_id))} · ${escapeHtml(utcDateLabel(inc.timestamp))} ${escapeHtml(utcTime(inc.timestamp))}</span></li>`;
+                });
+            }
+            if (cmds.length) {
+                html += '<li class="group" role="presentation">Commands</li>';
+                cmds.forEach((c) => {
+                    const idx = paletteItems.push({ run: c.run }) - 1;
+                    html += `<li role="option" id="pal-${idx}" data-idx="${idx}" aria-selected="false"><svg class="icon"><use href="#i-arrow"/></svg>${escapeHtml(c.label)}<span class="meta">${escapeHtml(c.meta)}</span></li>`;
+                });
+            }
+            if (!paletteItems.length) html = `<li class="palette-empty" role="presentation">Nothing matches “${escapeHtml(q)}”.</li>`;
+            $('palette-list').innerHTML = html;
+            paletteIndex = 0;
+            highlightPalette();
+        }
+
+        function highlightPalette() {
+            const opts = $('palette-list').querySelectorAll('[role="option"]');
+            opts.forEach((o, i) => o.setAttribute('aria-selected', String(i === paletteIndex)));
+            const active = opts[paletteIndex];
+            $('palette-input').setAttribute('aria-activedescendant', active ? active.id : '');
+            if (active) active.scrollIntoView({ block: 'nearest' });
+        }
+
+        function runPalette(idx) {
+            const item = paletteItems[idx];
+            if (!item) return;
+            $('palette').close();
+            item.run();
+        }
+
+        function onPaletteInput() {
+            const q = $('palette-input').value;
+            renderPalette(q, []);
+            clearTimeout(paletteTimer);
+            if (q.trim().length < 2) return;
+            const seq = ++paletteSeq;
+            paletteTimer = setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/incidents?limit=20&q=' + encodeURIComponent(q.trim()));
+                    if (!res.ok || seq !== paletteSeq) return;
+                    renderPalette($('palette-input').value, await res.json());
+                } catch (e) {}
+            }, 180);
+        }
+
+        /* ================= Session ================= */
         let currentUser = null;
 
         async function fetchUserSession() {
             try {
                 const res = await fetch('/api/auth/me');
-                if (!res.ok) {
-                    window.location.href = '/login';
-                    return false;
-                }
+                if (!res.ok) { window.location.href = '/login'; return false; }
                 const data = await res.json();
-                if (!data.authenticated || !data.user) {
-                    window.location.href = '/login';
-                    return false;
-                }
+                if (!data.authenticated || !data.user) { window.location.href = '/login'; return false; }
                 currentUser = data.user;
                 currentUser.is_admin = data.is_admin;
-                document.getElementById('user-email-display').innerText = currentUser.email;
-                document.getElementById('user-email-display').title = currentUser.email;
-
-                const isAdmin = currentUser.role === 'admin' || data.is_admin;
-                if (isAdmin) {
-                    document.getElementById('user-role-badge').classList.remove('hidden');
-                    document.getElementById('tenant-scope-admin-badge').classList.remove('hidden');
-                    document.getElementById('tenant-scope-text').innerText = 'Master Sentinel View: Full Fleet Telemetry & Decoy Operations';
+                $('user-email-display').innerText = currentUser.email;
+                $('user-email-display').title = currentUser.email;
+                if (currentUser.role === 'admin' || data.is_admin) {
+                    $('user-role-badge').innerText = 'Administrator';
+                    $('tenant-scope-text').innerText = 'All workspaces';
                 }
                 return true;
             } catch (e) {
@@ -1251,17 +1440,132 @@ interfaces without revealing surveillance mechanisms to the attacker.
         }
 
         async function logoutUser() {
-            try {
-                await fetch('/api/auth/logout', { method: 'POST' });
-            } catch (e) {}
+            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
             window.location.href = '/login';
         }
 
+        /* ================= Wiring ================= */
+        function incidentById(id) {
+            return allIncidents.find((i) => i.id === Number(id)) || (openIncidentData && openIncidentData.incident.id === Number(id) ? openIncidentData.incident : null);
+        }
+
+        document.addEventListener('click', (e) => {
+            const t = e.target.closest('button, a, .dep');
+            if (!t) return;
+            if (t.dataset.action === 'deploy') { openModal('token-modal'); return; }
+            if (t.hasAttribute('data-more')) { boardLimit += 25; renderIncidents(); return; }
+            if (t.hasAttribute('data-close')) { t.closest('dialog').close(); return; }
+            if (t.dataset.openIncident) { e.preventDefault(); openIncident(t.dataset.openIncident); return; }
+            if (t.dataset.isolate) { e.stopPropagation(); isolateIP(t.dataset.isolate); return; }
+            if (t.dataset.safelist) { addIpToSafeList(t.dataset.safelist, 'Safelisted from incident drawer'); return; }
+            if (t.dataset.removeSafe) { removeSafeIp(t.dataset.removeSafe); return; }
+            if (t.dataset.copy) { copyToClipboard(t.dataset.copy, t.dataset.copyLabel || 'Copied'); return; }
+            if (t.dataset.locate) {
+                e.stopPropagation();
+                const inc = incidentById(t.dataset.locate);
+                if (inc) {
+                    const c = coordsOf(inc);
+                    if ($('incident-drawer').open) closeDrawer();
+                    locateOnMap(c && c[0], c && c[1], inc.attacker_ip, place(inc));
+                }
+                return;
+            }
+            if (t.hasAttribute('data-copy-ioc') && openIncidentData) { copyToClipboard(iocText(openIncidentData.incident), 'Indicators copied'); return; }
+            if (t.hasAttribute('data-copy-json') && openIncidentData) { copyToClipboard(JSON.stringify(openIncidentData, null, 2), 'Incident JSON copied'); return; }
+            if (t.classList.contains('dep')) { openIncident(t.dataset.id); return; }
+            if (t.dataset.view) { e.preventDefault(); showView(t.dataset.view); try { history.replaceState(null, '', '#' + t.dataset.view); } catch (err) {} return; }
+        });
+
+        $('incidents-table-body').addEventListener('keydown', (e) => {
+            const row = e.target.closest('.dep');
+            if (!row || e.target !== row) return;
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIncident(row.dataset.id); }
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const next = e.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling;
+                if (next) next.focus();
+            }
+        });
+
+        document.querySelectorAll('.chip').forEach((chip) => chip.addEventListener('click', () => {
+            document.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
+            minScore = Number(chip.dataset.min) || 0;
+            boardLimit = 25;
+            renderIncidents();
+        }));
+        $('board-filter').addEventListener('input', (e) => { boardQuery = e.target.value; boardLimit = 25; renderIncidents(); });
+
+        $('incident-drawer').addEventListener('close', onDrawerClosed);
+        $('incident-drawer').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeDrawer(); });
+        ['safelist-modal', 'token-modal', 'palette'].forEach((id) => {
+            $(id).addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+        });
+
+        $('palette-input').addEventListener('input', onPaletteInput);
+        $('palette-input').addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); paletteIndex = Math.min(paletteIndex + 1, paletteItems.length - 1); highlightPalette(); }
+            if (e.key === 'ArrowUp') { e.preventDefault(); paletteIndex = Math.max(paletteIndex - 1, 0); highlightPalette(); }
+            if (e.key === 'Enter') { e.preventDefault(); runPalette(paletteIndex); }
+        });
+        $('palette-list').addEventListener('click', (e) => {
+            const opt = e.target.closest('[role="option"]');
+            if (opt) runPalette(Number(opt.dataset.idx));
+        });
+        $('palette-list').addEventListener('mousemove', (e) => {
+            const opt = e.target.closest('[role="option"]');
+            if (opt && Number(opt.dataset.idx) !== paletteIndex) { paletteIndex = Number(opt.dataset.idx); highlightPalette(); }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
+            if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName) && !document.querySelector('dialog[open]')) { e.preventDefault(); openPalette(); }
+        });
+
+        $('open-palette').addEventListener('click', openPalette);
+        $('refresh-btn').addEventListener('click', () => { refreshData(); toast('Refreshed.', 'info'); });
+        $('theme-btn').addEventListener('click', toggleTheme);
+        $('theme-menu-btn').addEventListener('click', toggleTheme);
+        $('safelist-btn').addEventListener('click', () => openModal('safelist-modal'));
+        $('deploy-btn').addEventListener('click', () => openModal('token-modal'));
+        $('sim-btn').addEventListener('click', simulateIntrusionBeacon);
+        $('logout-btn').addEventListener('click', logoutUser);
+        $('add-current-ip').addEventListener('click', addCurrentIpToSafeList);
+        $('add-safe-ip').addEventListener('click', addNewSafeIp);
+        $('new-safe-ip').addEventListener('keydown', (e) => { if (e.key === 'Enter') addNewSafeIp(); });
+        $('modal-submit-btn').addEventListener('click', submitNewToken);
+        $('deploy-another').addEventListener('click', resetModalToForm);
+        $('copy-canary').addEventListener('click', () => copyToClipboard($('modal-canary-url-display').value, 'Callback URL copied'));
+        $('copy-report').addEventListener('click', () => copyToClipboard($('report-content').innerText, 'Report copied'));
+
+        $('user-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = $('user-menu');
+            const open = menu.classList.toggle('hidden') === false;
+            $('user-btn').setAttribute('aria-expanded', String(open));
+            if (open) menu.querySelector('button').focus();
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.user')) { $('user-menu').classList.add('hidden'); $('user-btn').setAttribute('aria-expanded', 'false'); }
+        });
+        $('user-menu').addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { $('user-menu').classList.add('hidden'); $('user-btn').setAttribute('aria-expanded', 'false'); $('user-btn').focus(); }
+        });
+
+        function routeFromHash() {
+            const h = location.hash.replace('#', '');
+            if (h.startsWith('incident=')) { openIncident(h.split('=')[1]); return; }
+            if (['incidents', 'traps', 'report'].includes(h)) showView(h);
+        }
+
         window.onload = async () => {
+            $('kbd-hint').innerText = isMac ? '⌘K' : 'Ctrl K';
+            tickClock();
+            setInterval(tickClock, 1000);
             const authed = await fetchUserSession();
             if (authed) {
                 initMap();
-                refreshData();
+                await refreshData();
+                routeFromHash();
                 setInterval(refreshData, 10000);
             }
         };
