@@ -82,6 +82,22 @@ async def enterprise_security_headers_middleware(request: Request, call_next):
 
     return response
 
+@app.middleware("http")
+async def normalize_serverless_routing_middleware(request: Request, call_next):
+    """
+    Normalizes request paths if routed through serverless rewrites
+    (e.g., /api/index.py, /api/index, /index.py) to prevent 404 Not Found on cloud deployments.
+    """
+    path = request.scope.get("path", "")
+    for prefix in ["/api/index.py", "/api/index", "/index.py"]:
+        if path == prefix:
+            request.scope["path"] = "/"
+            break
+        elif path.startswith(prefix + "/"):
+            request.scope["path"] = path[len(prefix):]
+            break
+    return await call_next(request)
+
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 try:
@@ -211,6 +227,9 @@ def process_incident_async(
 # -------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/api/index.py", response_class=HTMLResponse)
+@app.get("/api/index", response_class=HTMLResponse)
+@app.get("/index.py", response_class=HTMLResponse)
 async def index_root(request: Request):
     """Directs web users to the dashboard if authenticated, otherwise to the login portal."""
     accept = request.headers.get("accept", "")

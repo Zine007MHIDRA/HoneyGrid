@@ -240,6 +240,23 @@ class TestAdversarialHardening(unittest.TestCase):
                     # Node not installed in minimal CI container; check for unescaped raw newlines in string literals
                     self.assertNotIn("join('\n')", sanitized)
 
+    def test_vercel_serverless_path_normalization(self):
+        """Verifies that Vercel serverless rewritten paths (/api/index.py, /api/index) route cleanly to root/login."""
+        client = TestClient(app)
+        
+        # Test /api/index.py routes to root (302 to /login for browser Accept header)
+        resp = client.get("/api/index.py", headers={"Accept": "text/html"})
+        self.assertIn(resp.status_code, (200, 302))
+        
+        # Test /api/index.py/login routes to /login
+        resp_login = client.get("/api/index.py/login")
+        self.assertEqual(resp_login.status_code, 200)
+        self.assertIn("HoneyGrid Sentinel", resp_login.text)
+        
+        # Test /api/index routes to root
+        resp_idx = client.get("/api/index", headers={"Accept": "text/html"})
+        self.assertIn(resp_idx.status_code, (200, 302))
+
 
 if __name__ == "__main__":
     unittest.main()
