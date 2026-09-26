@@ -86,11 +86,12 @@ class IncidentEvent(BaseModel):
     mitre_technique: str = "T1552: Unsecured Credentials"
 
 class BrowserTelemetry(BaseModel):
-    gpu_renderer: Optional[str] = None
-    screen_res: Optional[str] = None
-    cpu_cores: Optional[int] = None
-    device_memory: Optional[int] = None
-    local_lan_ip: Optional[str] = None
-    client_timezone: Optional[str] = None
-    platform: Optional[str] = None
+    # Public, attacker-controlled input: every field is bounded
+    gpu_renderer: Optional[str] = Field(None, max_length=256)
+    screen_res: Optional[str] = Field(None, max_length=64)
+    cpu_cores: Optional[int] = Field(None, ge=0, le=1024)
+    device_memory: Optional[int] = Field(None, ge=0, le=4096)
+    local_lan_ip: Optional[str] = Field(None, max_length=64)
+    client_timezone: Optional[str] = Field(None, max_length=64)
+    platform: Optional[str] = Field(None, max_length=64)
 

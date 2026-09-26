@@ -22,9 +22,10 @@ from honeygrid.database import (
     list_audit_logs, consume_captcha,
     delete_user_sessions, get_user_auth_record_by_id, set_user_password, list_users
 )
+from urllib.parse import urlsplit
 from honeygrid.models import IncidentEvent, Token, BrowserTelemetry, User, UserRegister, UserLogin
-from honeygrid.core.auth import hash_password, verify_password, generate_captcha, verify_captcha, burn_password_check, captcha_signature
-from honeygrid.core.rate_limit import login_limiter, account_limiter, register_limiter, captcha_limiter
+from honeygrid.core.auth import hash_password, verify_password, generate_captcha, verify_captcha, burn_password_check, captcha_signature, needs_rehash
+from honeygrid.core.rate_limit import login_limiter, account_limiter, register_limiter, captcha_limiter, canary_limiter, telemetry_limiter, alert_limiter
 from honeygrid.core.fingerprint import extract_client_ip, identify_client_tool, ip_in_networks
 from honeygrid.core.redact import redact_headers
 from honeygrid.core.audit import log_audit_event
@@ -77,6 +78,35 @@ def session_token_from(request: Request) -> Optional[str]:
             token = auth_header[7:].strip()
     return token or None
 
+STATE_CHANGING = ("POST", "PUT", "PATCH", "DELETE")
+MAX_BODY_BYTES = 64 * 1024
+
+@app.middleware("http")
+async def request_guard_middleware(request: Request, call_next):
+    """Two cheap guards before any route runs:
+    1. Bodies over 64 KB are refused (nothing legitimate here is larger; canary floods are).
+    2. CSRF: a state-changing /api call carrying an Origin or Referer from another site is refused.
+       Browsers always attach one of them to cross-site requests; CLI clients send neither."""
+    path = request.scope.get("path", "")
+    length = request.headers.get("content-length", "")
+    if length.isdigit() and int(length) > MAX_BODY_BYTES:
+        return JSONResponse({"error": "Request too large"}, status_code=413)
+
+    if request.method in STATE_CHANGING and path.startswith("/api/") and not path.startswith("/api/v1/auth"):
+        source = request.headers.get("origin") or request.headers.get("referer") or ""
+        if source and source != "null":
+            source_host = urlsplit(source).netloc.lower()
+            own_hosts = {(request.headers.get("host") or "").lower()}
+            if settings.IS_PRODUCTION:
+                # Vercel's edge forwards the public hostname here
+                own_hosts.add((request.headers.get("x-forwarded-host") or "").lower())
+            own_hosts.discard("")
+            if source_host not in own_hosts:
+                return JSONResponse({"error": "Cross-site request refused"}, status_code=403)
+        elif source == "null":
+            return JSONResponse({"error": "Cross-site request refused"}, status_code=403)
+    return await call_next(request)
+
 @app.middleware("http")
 async def require_password_change_middleware(request: Request, call_next):
     path = request.scope.get("path", "")
@@ -96,8 +126,10 @@ async def enterprise_security_headers_middleware(request: Request, call_next):
     Applies defense-in-depth HTTP security headers for operator sessions,
     and deceptive stealth cloaking on public canary tripwire endpoints.
     """
+    # Per-request nonce: only <script> tags the server stamped with it may run on operator pages
+    request.state.csp_nonce = secrets.token_urlsafe(18)
     response = await call_next(request)
-    
+
     path = request.url.path
     is_canary = path.startswith("/t/") or path == "/.env" or path.startswith("/api/v1/auth")
     
@@ -120,13 +152,15 @@ async def enterprise_security_headers_middleware(request: Request, call_next):
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://unpkg.com; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
+            f"script-src 'self' 'nonce-{request.state.csp_nonce}' https://unpkg.com/leaflet@1.9.4/; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com/leaflet@1.9.4/; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https://*.cartocdn.com https://*.openstreetmap.org; "
             "connect-src 'self' https://*.cartocdn.com; "
             "frame-ancestors 'none'; "
-            "base-uri 'self';"
+            "base-uri 'self'; "
+            "form-action 'self'; "
+            "object-src 'none';"
         )
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         if path.startswith(NO_STORE_PREFIXES) or path in ("/login", "/dashboard"):
@@ -180,6 +214,12 @@ async def get_theme_stylesheet():
         return Response(status_code=404)
     return Response(content=css, media_type="text/css", headers={"Cache-Control": "public, max-age=300"})
 
+def render_page(name: str, request: Request) -> str:
+    """Operator/landing templates with every <script> stamped with this request's CSP nonce."""
+    html = get_template(name)
+    nonce = getattr(request.state, "csp_nonce", "")
+    return html.replace("<script>", f'<script nonce="{nonce}">').replace("<script src=", f'<script nonce="{nonce}" src=')
+
 def get_template(name: str) -> str:
     candidate_paths = [
         TEMPLATES_DIR / name,
@@ -215,7 +255,8 @@ def process_incident_async(
     http_method: str,
     request_path: str,
     query_params: str,
-    headers_dict: dict
+    headers_dict: dict,
+    geo_headers: Optional[dict] = None
 ):
     """
     Background task to resolve GeoIP, threat intel, record incident and dispatch Discord alert.
@@ -224,12 +265,14 @@ def process_incident_async(
     """
     try:
         try:
-            geo = lookup_ip_geolocation(raw_ip, headers=headers_dict)
+            # Private callers are never resolved to the server's own public IP (isolating that would
+            # block the sensor itself); edge geo headers are only used when the edge is trusted.
+            geo = lookup_ip_geolocation(raw_ip, fallback_to_public=False, headers=headers_dict if geo_headers is None else geo_headers)
         except Exception as ge:
             print(f"[!] GeoIP lookup failed: {ge}")
             geo = {"ip": raw_ip, "country": "Unknown", "city": "Unknown", "region": "Unknown", "isp": "Unknown", "asn": "Unknown"}
 
-        reported_ip = geo.get("query_ip") if is_local and geo.get("query_ip") else raw_ip
+        reported_ip = raw_ip
         try:
             threat_profile = analyze_ip_threat(reported_ip, geo)
         except Exception as te:
@@ -270,7 +313,11 @@ def process_incident_async(
         record_incident(event)
         
         try:
-            send_discord_alert(event, token)
+            # One Discord alert per attacker + decoy per 5 minutes, so floods can't drown the channel
+            alert_key = f"{reported_ip}|{token_id}"
+            if not alert_limiter.is_locked(alert_key)[0]:
+                alert_limiter.record_failure(alert_key)
+                send_discord_alert(event, token)
         except Exception as de:
             print(f"[!] Discord alerting failed: {de}")
             
@@ -301,7 +348,7 @@ async def index_root(request: Request):
         user = get_current_user(request)
         if user:
             return RedirectResponse(url="/dashboard", status_code=302)
-        html = get_template("landing.html")
+        html = render_page("landing.html", request)
         if html:
             return HTMLResponse(html)
         return RedirectResponse(url="/login", status_code=302)
@@ -313,7 +360,7 @@ async def login_portal(request: Request):
     user = get_current_user(request)
     if user:
         return RedirectResponse(url="/dashboard", status_code=302)
-    html = get_template("login.html")
+    html = render_page("login.html", request)
     if not html:
         return HTMLResponse("<h1>HoneyGrid Login Portal template not found</h1>", status_code=500)
     return HTMLResponse(html)
@@ -324,7 +371,7 @@ async def soc_dashboard(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
-    html = get_template("dashboard.html")
+    html = render_page("dashboard.html", request)
     if not html:
         return HTMLResponse("<h1>HoneyGrid Dashboard template not found</h1>", status_code=500)
     return HTMLResponse(html)
@@ -501,6 +548,11 @@ async def api_login(data: UserLogin, request: Request):
     login_limiter.record_success(client_ip)
     account_limiter.record_success(email)
 
+    # Upgrade hashes made with the older work factor while we briefly know the password
+    if needs_rehash(record["salt"]):
+        new_hash, new_salt = await run_in_threadpool(hash_password, password)
+        set_user_password(record["id"], new_hash, new_salt, must_change=bool(record.get("must_change_password")))
+
     user = User(
         id=record["id"],
         email=record["email"],
@@ -534,6 +586,19 @@ async def api_logout(request: Request):
         delete_session(session_token)
     log_audit_event("AUTH_LOGOUT", "SUCCESS", actor=user.email if user else "session", client_ip=client_ip)
     resp = JSONResponse({"status": "success", "message": "Session terminated", "redirect": "/login"})
+    resp.delete_cookie(key=settings.SESSION_COOKIE_NAME)
+    return resp
+
+@app.post("/api/auth/logout-all")
+async def api_logout_all(request: Request):
+    """Ends every session of the current operator, including this one."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    client_ip, _ = extract_client_ip(request)
+    ended = delete_user_sessions(user.id)
+    log_audit_event("AUTH_LOGOUT_ALL", "SUCCESS", actor=user.email, client_ip=client_ip, target=user.id, metadata={"sessions_ended": ended})
+    resp = JSONResponse({"status": "success", "message": f"Signed out of {ended} session(s).", "redirect": "/login"})
     resp.delete_cookie(key=settings.SESSION_COOKIE_NAME)
     return resp
 
@@ -756,6 +821,23 @@ async def api_tokens(request: Request):
     tokens = list_tokens(user_id=user.id, is_admin=user.is_admin)
     return [t.model_dump() for t in tokens]
 
+DECOY_TYPES = {"web", "aws", "env", "git", "pdf", "keepass"}
+MAX_DECOYS_PER_OPERATOR = 100
+TRAPS_DIR = Path("traps")
+
+def safe_file_stub(label: str) -> str:
+    """A file-name-safe version of a decoy label: no separators, no dot-dot, bounded length."""
+    stub = re.sub(r"[^A-Za-z0-9_-]+", "_", label).strip("_-")[:60]
+    return stub or "decoy"
+
+def trap_path(name: str) -> Path:
+    """Resolves a path inside traps/ and refuses anything that escapes it."""
+    base = TRAPS_DIR.resolve()
+    target = (base / name).resolve()
+    if base != target and base not in target.parents:
+        raise ValueError("decoy path escapes the traps directory")
+    return target
+
 @app.post("/api/tokens/create")
 async def api_create_token(request: Request, data: Dict[str, Any]):
     user = get_current_user(request)
@@ -763,9 +845,14 @@ async def api_create_token(request: Request, data: Dict[str, Any]):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     client_ip, _ = extract_client_ip(request)
-    token_type = data.get("token_type", "web")
-    label = data.get("label", f"Decoy-{token_type.upper()}")
-    desc = data.get("description", "Generated from Sentinel SOC Dashboard")
+    token_type = str(data.get("token_type") or "web")
+    if token_type not in DECOY_TYPES:
+        return JSONResponse({"status": "error", "message": "Unknown decoy type."}, status_code=400)
+    label = str(data.get("label") or f"Decoy-{token_type.upper()}").strip()[:80] or f"Decoy-{token_type.upper()}"
+    desc = str(data.get("description") or "Generated from Sentinel SOC Dashboard")[:200]
+    if not user.is_admin and len(list_tokens(user_id=user.id, is_admin=False)) >= MAX_DECOYS_PER_OPERATOR:
+        return JSONResponse({"status": "error", "message": f"Decoy limit reached ({MAX_DECOYS_PER_OPERATOR}). Remove unused decoys first."}, status_code=429)
+    stub = safe_file_stub(label)
 
     if token_type == "web":
         token, _ = create_web_canary_token(label, desc, owner_id=user.id, owner_email=user.email)
@@ -774,11 +861,11 @@ async def api_create_token(request: Request, data: Dict[str, Any]):
     elif token_type == "env":
         token, _ = create_env_honeytoken(label, desc, owner_id=user.id, owner_email=user.email)
     elif token_type == "git":
-        token, _ = create_git_honeytoken(f"traps/git_decoy_{label}", label, owner_id=user.id, owner_email=user.email)
+        token, _ = create_git_honeytoken(str(trap_path(f"git_decoy_{stub}")), label, owner_id=user.id, owner_email=user.email)
     elif token_type == "pdf":
-        token, _ = create_canary_pdf(f"traps/{label}.pdf", label, owner_id=user.id, owner_email=user.email)
+        token, _ = create_canary_pdf(str(trap_path(f"{stub}.pdf")), label, owner_id=user.id, owner_email=user.email)
     elif token_type == "keepass":
-        token, _ = create_keepass_honeytoken(f"traps/{label}.kdbx", label, owner_id=user.id, owner_email=user.email)
+        token, _ = create_keepass_honeytoken(str(trap_path(f"{stub}.kdbx")), label, owner_id=user.id, owner_email=user.email)
     else:
         token, _ = create_web_canary_token(label, desc, owner_id=user.id, owner_email=user.email)
         
@@ -859,6 +946,16 @@ async def api_isolate_ip(request: Request, data: Dict[str, Any]):
 # -------------------------------------------------------------
 
 TOKEN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+# Built-in scanner traps that exist without a tokens row
+BUILTIN_TRAP_IDS = {"canary_api_auth_trap", "scanner_env_probe"}
+SPOOFABLE_GEO_HEADERS = ("x-vercel-ip-", "cf-ip")
+
+def edge_headers_trusted(request: Request) -> bool:
+    """Vercel's edge overwrites x-vercel-ip-*; cf-ip* is only believable from a Cloudflare peer."""
+    if settings.IS_PRODUCTION:
+        return True
+    peer = request.client.host if request.client else ""
+    return bool(peer) and ip_in_networks(peer, settings.get_cloudflare_proxies())
 html_escape = html.escape
 
 @app.api_route("/t/{token_id}", methods=["GET", "POST", "HEAD"])
@@ -878,22 +975,33 @@ async def trigger_canary(
     raw_ip, is_local = extract_client_ip(request)
     # Credentials a victim's browser sends (e.g. an operator's session cookie) are never stored
     headers_dict = redact_headers(dict(request.headers))
+    geo_headers = headers_dict if edge_headers_trusted(request) else {
+        k: v for k, v in headers_dict.items() if not k.startswith(SPOOFABLE_GEO_HEADERS)
+    }
+
+    # Record only real decoys, and at most 60 hits per source IP per 10 minutes. The response is the
+    # same either way, so a flooder learns nothing, but the database and Discord stay usable.
+    known_trap = token_id in BUILTIN_TRAP_IDS or get_token(token_id) is not None
+    flooding = canary_limiter.is_locked(raw_ip)[0]
     user_agent = headers_dict.get("user-agent", "")
     client_tool = identify_client_tool(user_agent)
     
     # Enqueue heavy telemetry resolution, GeoIP, threat intel, and Discord alerting to background
-    background_tasks.add_task(
-        process_incident_async,
-        token_id=token_id,
-        raw_ip=raw_ip,
-        is_local=is_local,
-        client_tool=client_tool,
-        user_agent=user_agent,
-        http_method=request.method,
-        request_path=str(request.url.path),
-        query_params=str(request.url.query),
-        headers_dict=headers_dict
-    )
+    if known_trap and not flooding:
+        canary_limiter.record_failure(raw_ip)
+        background_tasks.add_task(
+            process_incident_async,
+            token_id=token_id,
+            raw_ip=raw_ip,
+            is_local=is_local,
+            client_tool=client_tool,
+            user_agent=user_agent[:512],
+            http_method=request.method,
+            request_path=str(request.url.path)[:512],
+            query_params=str(request.url.query)[:2048],
+            headers_dict=headers_dict,
+            geo_headers=geo_headers
+        )
 
     accept = headers_dict.get("accept", "")
     
@@ -924,6 +1032,9 @@ async def receive_browser_telemetry(
     if not TOKEN_ID_PATTERN.match(token_id):
         return {"status": "received"}
     client_ip, is_local = extract_client_ip(request)
+    if telemetry_limiter.is_locked(client_ip)[0] or get_token(token_id) is None:
+        return {"status": "received"}
+    telemetry_limiter.record_failure(client_ip)
     update_incident_telemetry(token_id, telemetry, client_ip=client_ip, is_local=is_local)
     return {"status": "received"}
 

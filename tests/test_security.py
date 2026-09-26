@@ -18,7 +18,7 @@ from honeygrid.database import (
 )
 from honeygrid.models import IncidentEvent, Token
 from honeygrid.core.auth import generate_captcha, hash_password, encode_password_hash
-from honeygrid.core.rate_limit import login_limiter, account_limiter, register_limiter, captcha_limiter
+from honeygrid.core.rate_limit import login_limiter, account_limiter, register_limiter, captcha_limiter, canary_limiter, telemetry_limiter
 from honeygrid.core import containment
 from honeygrid.server.listener import app
 
@@ -52,7 +52,7 @@ def _captcha():
     return code, token
 
 def _reset_limits():
-    for limiter in (login_limiter, register_limiter, captcha_limiter):
+    for limiter in (login_limiter, register_limiter, captcha_limiter, canary_limiter, telemetry_limiter):
         limiter.record_success(LOCAL_IP)
 
 
@@ -289,6 +289,116 @@ class TestPasswordReset(SecurityTestCase):
         account_limiter.record_success(operator.email)
         res = _client(operator).post("/api/auth/change-password", json={"current_password": "wrong guess here", "new_password": "a whole new password"})
         self.assertEqual(res.status_code, 400)
+
+
+class TestRoundTwo(SecurityTestCase):
+    def test_cross_site_state_changes_are_refused(self):
+        client = _client(_user())
+        evil = client.post("/api/safelist/add", json={"ip": "203.0.113.60"}, headers={"origin": "https://evil.example"})
+        self.assertEqual(evil.status_code, 403)
+        evil_ref = client.post("/api/safelist/add", json={"ip": "203.0.113.60"}, headers={"referer": "https://evil.example/page"})
+        self.assertEqual(evil_ref.status_code, 403)
+        same = client.post("/api/safelist/add", json={"ip": "203.0.113.60"}, headers={"origin": "http://testserver"})
+        self.assertEqual(same.status_code, 200)
+
+    def test_oversized_bodies_are_refused(self):
+        res = TestClient(app).post("/api/auth/login", content=b"x" * (70 * 1024), headers={"content-type": "application/json"})
+        self.assertEqual(res.status_code, 413)
+
+    def test_operator_pages_use_a_script_nonce(self):
+        res = TestClient(app).get("/login", headers={"accept": "text/html"})
+        csp = res.headers["content-security-policy"]
+        script_src = next(d for d in csp.split(";") if d.strip().startswith("script-src"))
+        self.assertNotIn("'unsafe-inline'", script_src)
+        nonce = script_src.split("'nonce-")[1].split("'")[0]
+        self.assertIn(f'<script nonce="{nonce}">', res.text)
+        self.assertNotRegex(res.text, r'\son(click|submit|error)=')
+        second = TestClient(app).get("/login", headers={"accept": "text/html"}).headers["content-security-policy"]
+        self.assertNotEqual(csp, second, "each response gets a fresh nonce")
+
+    def test_sessions_are_stored_hashed_and_can_all_be_ended(self):
+        import sqlite3
+        from honeygrid.database import get_db_path
+        user = _user()
+        token_a = create_session(user.id, expire_hours=1)
+        token_b = create_session(user.id, expire_hours=1)
+        conn = sqlite3.connect(get_db_path())
+        stored = [r[0] for r in conn.execute("SELECT session_token FROM sessions WHERE user_id = ?", (user.id,))]
+        conn.close()
+        self.assertEqual(len(stored), 2)
+        self.assertNotIn(token_a, stored)
+        self.assertTrue(all(len(s) == 64 for s in stored))
+
+        client_a = TestClient(app)
+        client_a.cookies.set(settings.SESSION_COOKIE_NAME, token_a)
+        client_b = TestClient(app)
+        client_b.cookies.set(settings.SESSION_COOKIE_NAME, token_b)
+        self.assertEqual(client_a.post("/api/auth/logout-all").status_code, 200)
+        self.assertEqual(client_b.get("/api/auth/me").status_code, 401)
+
+    def test_legacy_password_hashes_are_upgraded_at_login(self):
+        import hashlib
+        from honeygrid.database import get_user_auth_record_by_email
+        salt = "0123456789abcdef0123456789abcdef"
+        legacy = hashlib.pbkdf2_hmac("sha256", b"legacy password 99", salt.encode(), 200_000).hex()
+        user = create_user(email=_email("legacy"), password_hash=legacy, salt=salt)
+        account_limiter.record_success(user.email)
+        code, token = _captcha()
+        res = TestClient(app).post("/api/auth/login", json={"email": user.email, "password": "legacy password 99", "captcha_answer": code, "captcha_token": token})
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(get_user_auth_record_by_email(user.email)["salt"].startswith("i600k:"))
+
+    def test_unknown_tokens_and_floods_are_not_recorded(self):
+        owner = _user()
+        token = _token(owner)
+        with patch("honeygrid.server.listener.process_incident_async") as process:
+            TestClient(app).get("/t/tok_does_not_exist", headers={"accept": "text/html"})
+            self.assertFalse(process.called, "unknown decoys are not recorded")
+            TestClient(app).get(f"/t/{token.id}", headers={"accept": "text/html"})
+            self.assertTrue(process.called)
+            process.reset_mock()
+            for _ in range(60):
+                canary_limiter.record_failure(LOCAL_IP)
+            res = TestClient(app).get(f"/t/{token.id}", headers={"accept": "text/html"})
+            self.assertEqual(res.status_code, 401, "the decoy still answers normally")
+            self.assertFalse(process.called, "a flooding source stops being recorded")
+
+    def test_telemetry_is_bounded(self):
+        owner = _user()
+        token = _token(owner)
+        res = TestClient(app).post(f"/t/{token.id}/telemetry", json={"gpu_renderer": "x" * 5000})
+        self.assertEqual(res.status_code, 422)
+
+    def test_private_callers_are_not_attributed_to_the_server(self):
+        from honeygrid.server.listener import process_incident_async
+        owner = _user()
+        token = _token(owner)
+        with patch("honeygrid.server.listener.lookup_ip_geolocation", return_value={"query_ip": "198.51.100.99"}) as lookup, \
+                patch("honeygrid.server.listener.send_discord_alert"):
+            process_incident_async(token_id=token.id, raw_ip="10.1.2.3", is_local=True, client_tool="cURL CLI",
+                                   user_agent="curl", http_method="GET", request_path="/t/x", query_params="", headers_dict={})
+        self.assertFalse(lookup.call_args.kwargs.get("fallback_to_public"))
+        stored = [i for i in list_incidents(is_admin=True, limit=50) if i.token_id == token.id]
+        self.assertEqual(stored[0].attacker_ip, "10.1.2.3")
+
+    def test_spoofed_edge_geo_headers_are_ignored_off_the_edge(self):
+        owner = _user()
+        token = _token(owner)
+        with patch("honeygrid.server.listener.process_incident_async") as process:
+            TestClient(app).get(f"/t/{token.id}", headers={"x-vercel-ip-latitude": "1.0", "x-vercel-ip-longitude": "2.0", "cf-iplatitude": "3"})
+        geo_headers = process.call_args.kwargs["geo_headers"]
+        self.assertFalse(any(k.startswith(("x-vercel-ip-", "cf-ip")) for k in geo_headers))
+
+    def test_decoy_files_stay_inside_traps(self):
+        from honeygrid.server.listener import trap_path, safe_file_stub
+        self.assertEqual(safe_file_stub("../../etc/passwd"), "etc_passwd")
+        with self.assertRaises(ValueError):
+            trap_path("../outside.pdf")
+        client = _client(_user())
+        res = client.post("/api/tokens/create", json={"token_type": "pdf", "label": "../../escape"})
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse((Path(__file__).resolve().parent.parent.parent / "escape.pdf").exists())
+        self.assertEqual(client.post("/api/tokens/create", json={"token_type": "shell", "label": "x"}).status_code, 400)
 
 
 class TestHeadersAndSecrets(SecurityTestCase):

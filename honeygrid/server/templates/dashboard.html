@@ -10,8 +10,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/ui/theme.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <style>
         .hidden { display: none !important; }
         body { min-height: 100vh; }
@@ -325,7 +325,7 @@
     <header class="band">
         <div class="band-inner">
             <a class="wordmark" href="/dashboard" aria-label="HoneyGrid Sentinel console">
-                <img src="/api/logo" alt="" onerror="this.src='/static/logo.jpg'" />
+                <img src="/api/logo" alt="" />
                 <b>HoneyGrid</b><span>Sentinel</span>
             </a>
             <span class="scope" id="tenant-scope-text">Your workspace</span>
@@ -347,6 +347,7 @@
                     <button type="button" role="menuitem" id="password-menu-btn"><svg class="icon"><use href="#i-key"/></svg>Change password</button>
                     <button type="button" role="menuitem" id="theme-menu-btn"><svg class="icon"><use href="#i-theme"/></svg>Switch theme</button>
                     <button type="button" role="menuitem" id="logout-btn"><svg class="icon"><use href="#i-logout"/></svg>Sign out</button>
+                    <button type="button" role="menuitem" id="logout-all-btn"><svg class="icon"><use href="#i-logout"/></svg>Sign out everywhere</button>
                 </div>
             </div>
         </div>
@@ -442,7 +443,7 @@
                     <div><h1>Incident report</h1><p>A plain-text summary of this monitoring window, ready to print or paste.</p></div>
                     <div style="display:flex;gap:var(--space-2)" class="no-print">
                         <button class="btn" type="button" id="copy-report"><svg class="icon"><use href="#i-copy"/></svg>Copy</button>
-                        <button class="btn primary" type="button" onclick="window.print()"><svg class="icon"><use href="#i-print"/></svg>Print</button>
+                        <button class="btn primary" type="button" id="print-report"><svg class="icon"><use href="#i-print"/></svg>Print</button>
                     </div>
                 </div>
                 <section class="panel"><pre class="report" id="report-content">Generating report…</pre></section>
@@ -1607,6 +1608,14 @@ ${(stats.top_countries || []).length ? stats.top_countries.map((c) => '  ' + c.c
             }
         }
 
+        async function logoutEverywhere() {
+            $('user-menu').classList.add('hidden');
+            const ok = await confirmAction('Sign out everywhere', 'End every session on every device, including this one?', 'Sign out everywhere');
+            if (!ok) return;
+            try { await fetch('/api/auth/logout-all', { method: 'POST' }); } catch (e) {}
+            window.location.href = '/login';
+        }
+
         async function logoutUser() {
             try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
             window.location.href = '/login';
@@ -1698,6 +1707,8 @@ ${(stats.top_countries || []).length ? stats.top_countries.map((c) => '  ' + c.c
         $('deploy-btn').addEventListener('click', () => openModal('token-modal'));
         $('sim-btn').addEventListener('click', simulateIntrusionBeacon);
         $('logout-btn').addEventListener('click', logoutUser);
+        $('logout-all-btn').addEventListener('click', logoutEverywhere);
+        $('print-report').addEventListener('click', () => window.print());
         $('password-menu-btn').addEventListener('click', () => { $('user-menu').classList.add('hidden'); openPasswordDialog(false); });
         $('operators-menu-btn').addEventListener('click', () => { $('user-menu').classList.add('hidden'); openOperators(); });
         $('password-form').addEventListener('submit', submitPasswordChange);

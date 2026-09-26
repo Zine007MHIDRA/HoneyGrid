@@ -62,3 +62,9 @@ account_limiter = LoginRateLimiter(max_attempts=10, window_seconds=900, lockout_
 register_limiter = LoginRateLimiter(max_attempts=5, window_seconds=3600, lockout_seconds=3600, prefix="reg:")
 # Per client IP: captcha issuance
 captcha_limiter = LoginRateLimiter(max_attempts=40, window_seconds=600, lockout_seconds=600, prefix="cap:")
+# Per source IP: canary hits that get recorded (the decoy response itself is never throttled)
+canary_limiter = LoginRateLimiter(max_attempts=60, window_seconds=600, lockout_seconds=600, prefix="can:")
+# Per source IP: browser telemetry submissions
+telemetry_limiter = LoginRateLimiter(max_attempts=30, window_seconds=600, lockout_seconds=600, prefix="tel:")
+# Per attacker+decoy: at most one Discord alert every 5 minutes
+alert_limiter = LoginRateLimiter(max_attempts=1, window_seconds=300, lockout_seconds=300, prefix="alert:")

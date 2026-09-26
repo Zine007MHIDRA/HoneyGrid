@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from honeygrid.config import settings
 from honeygrid.models import Token, IncidentEvent, BrowserTelemetry, User
-from honeygrid.core.auth import generate_session_token, generate_user_id, decode_password_hash
+from honeygrid.core.auth import generate_session_token, generate_user_id, decode_password_hash, hash_session_token
 from honeygrid.core.redact import redact_headers, headers_need_redaction
 
 def get_db_path() -> str:
@@ -225,6 +225,7 @@ def init_db():
 
     _migrate_safe_ips_to_tenants(cursor)
     _redact_stored_credentials(cursor)
+    _hash_stored_session_tokens(cursor)
     conn.commit()
     conn.close()
     seed_admin_from_env()
@@ -266,6 +267,13 @@ def _redact_stored_credentials(cursor: sqlite3.Cursor):
             continue
         if isinstance(headers, dict) and headers_need_redaction(headers):
             cursor.execute("UPDATE incidents SET raw_headers = ? WHERE id = ?", (json.dumps(redact_headers(headers)), row["id"]))
+
+def _hash_stored_session_tokens(cursor: sqlite3.Cursor):
+    """Replaces plaintext session tokens (hgs_...) from older versions with their SHA-256 digests."""
+    cursor.execute("SELECT session_token FROM sessions WHERE session_token LIKE 'hgs_%'")
+    for row in cursor.fetchall():
+        cursor.execute("UPDATE sessions SET session_token = ? WHERE session_token = ?",
+                       (hash_session_token(row["session_token"]), row["session_token"]))
 
 def seed_admin_from_env():
     """Creates or updates the admin from ADMIN_EMAIL + ADMIN_PASSWORD_HASH. The environment is the
@@ -346,9 +354,10 @@ def create_session(user_id: str, expire_hours: int = 168) -> str:
     session_token = generate_session_token()
     now = datetime.now(timezone.utc)
     expires_at = (now + timedelta(hours=expire_hours)).isoformat()
+    cursor.execute("DELETE FROM sessions WHERE expires_at < ?", (now.isoformat(),))
     cursor.execute(
         "INSERT INTO sessions (session_token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-        (session_token, user_id, now.isoformat(), expires_at)
+        (hash_session_token(session_token), user_id, now.isoformat(), expires_at)
     )
     conn.commit()
     conn.close()
@@ -363,14 +372,14 @@ def get_user_by_session(session_token: str) -> Optional[User]:
         FROM sessions
         JOIN users ON sessions.user_id = users.id
         WHERE sessions.session_token = ?
-    """, (session_token,))
+    """, (hash_session_token(session_token),))
     row = cursor.fetchone()
     if not row:
         conn.close()
         return None
     
     if row["expires_at"] < now_iso:
-        cursor.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
+        cursor.execute("DELETE FROM sessions WHERE session_token = ?", (hash_session_token(session_token),))
         conn.commit()
         conn.close()
         return None
@@ -381,7 +390,7 @@ def get_user_by_session(session_token: str) -> Optional[User]:
 def delete_session(session_token: str):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
+    cursor.execute("DELETE FROM sessions WHERE session_token = ?", (hash_session_token(session_token),))
     conn.commit()
     conn.close()
 
@@ -390,7 +399,7 @@ def delete_user_sessions(user_id: str, keep_token: Optional[str] = None) -> int:
     conn = get_db_connection()
     cursor = conn.cursor()
     if keep_token:
-        cursor.execute("DELETE FROM sessions WHERE user_id = ? AND session_token != ?", (user_id, keep_token))
+        cursor.execute("DELETE FROM sessions WHERE user_id = ? AND session_token != ?", (user_id, hash_session_token(keep_token)))
     else:
         cursor.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
     removed = cursor.rowcount

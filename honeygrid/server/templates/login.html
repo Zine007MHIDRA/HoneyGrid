@@ -83,7 +83,7 @@
     <header class="band">
         <div class="band-inner">
             <a class="wordmark" href="/" aria-label="HoneyGrid Sentinel home">
-                <img src="/api/logo" alt="" onerror="this.src='/static/logo.jpg'" />
+                <img src="/api/logo" alt="" />
                 <b>HoneyGrid</b><span>Sentinel</span>
             </a>
             <div class="spacer"></div>
@@ -110,8 +110,8 @@
             </div>
             <div class="panel-body">
                 <div class="tabs" role="tablist" aria-label="Access mode">
-                    <button id="tab-btn-login" type="button" role="tab" aria-selected="true" onclick="switchAuthTab('login')">Sign in</button>
-                    <button id="tab-btn-register" type="button" role="tab" aria-selected="false" onclick="switchAuthTab('register')">Create account</button>
+                    <button id="tab-btn-login" type="button" role="tab" aria-selected="true">Sign in</button>
+                    <button id="tab-btn-register" type="button" role="tab" aria-selected="false">Create account</button>
                 </div>
 
                 <div id="auth-alert" class="alert hidden" role="alert">
@@ -119,7 +119,7 @@
                     <span id="auth-alert-msg"></span>
                 </div>
 
-                <form id="auth-form" onsubmit="handleAuthSubmit(event)" method="POST" novalidate>
+                <form id="auth-form" method="POST" novalidate>
                     <input type="text" name="hp_decoy_field" id="hp-decoy-field" tabindex="-1" autocomplete="off" style="display:none !important; position:absolute; left:-9999px;" aria-hidden="true" />
 
                     <div class="field">
@@ -134,7 +134,7 @@
                         </div>
                         <div class="pw">
                             <input id="auth-password" name="password" type="password" autocomplete="current-password" required placeholder="Your password" class="input" />
-                            <button type="button" onclick="togglePasswordVisibility()" aria-label="Show password" id="pw-toggle">
+                            <button type="button" aria-label="Show password" id="pw-toggle">
                                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
                             </button>
                         </div>
@@ -146,8 +146,8 @@
                             <span class="hint">Click the image for a new code</span>
                         </div>
                         <div class="captcha">
-                            <div id="captcha-svg-container" onclick="loadCaptcha()" title="Load a new code">Loading code…</div>
-                            <button type="button" class="btn reload" onclick="loadCaptcha()" aria-label="Load a new verification code">
+                            <div id="captcha-svg-container" title="Load a new code">Loading code…</div>
+                            <button type="button" class="btn reload" id="captcha-reload" aria-label="Load a new verification code">
                                 <svg id="captcha-reload-icon" class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
                             </button>
                         </div>
@@ -302,6 +302,14 @@
                 loadCaptcha();
             }
         }
+
+        // Event wiring (the CSP blocks inline on* handlers)
+        document.getElementById('tab-btn-login').addEventListener('click', () => switchAuthTab('login'));
+        document.getElementById('tab-btn-register').addEventListener('click', () => switchAuthTab('register'));
+        document.getElementById('auth-form').addEventListener('submit', handleAuthSubmit);
+        document.getElementById('pw-toggle').addEventListener('click', togglePasswordVisibility);
+        document.getElementById('captcha-svg-container').addEventListener('click', loadCaptcha);
+        document.getElementById('captcha-reload').addEventListener('click', loadCaptcha);
 
         window.onload = async () => {
             try {

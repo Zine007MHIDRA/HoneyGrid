@@ -202,12 +202,16 @@ class TestAdversarialHardening(unittest.TestCase):
             payload = json.loads(called_kwargs.get("data", "{}"))
             self.assertEqual(payload["username"], "HoneyGrid Sentinel • IAM")
             embed = payload["embeds"][0]
-            self.assertIn(dummy_user.email, embed["title"])
+            self.assertIn("o***@corp.internal", embed["title"])
             field_names = [f["name"] for f in embed["fields"]]
             self.assertTrue(any("Operator Account" in n for n in field_names))
             self.assertTrue(any("Network Origin" in n for n in field_names))
-            self.assertTrue(any("Client Environment" in n for n in field_names))
-            self.assertTrue(any("Security Attestation" in n for n in field_names))
+            # Data minimization: no full email, IP address, city or user agent leaves the server
+            dumped = json.dumps(payload)
+            self.assertNotIn(dummy_user.email, dumped)
+            self.assertNotIn("203.0.113.19", dumped)
+            self.assertNotIn("Rabat", dumped)
+            self.assertNotIn("TestBrowser", dumped)
 
     def test_html_templates_javascript_syntax(self):
         """Validates that all inline <script> tags in dashboard.html and login.html compile without SyntaxErrors."""

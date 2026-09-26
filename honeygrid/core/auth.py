@@ -60,20 +60,33 @@ def _glyph_path(char: str, ox: float, oy: float, scale: float, angle_deg: float)
         parts.append(" ".join(cmds))
     return " ".join(parts)
 
+# Current PBKDF2 work factor (OWASP 2023 guidance for PBKDF2-HMAC-SHA256). The iteration count
+# travels inside the salt ("i600k:<hex>") so older 200k hashes still verify and get upgraded.
+PBKDF2_ITERATIONS = 600_000
+LEGACY_ITERATIONS = 200_000
+_SALT_PREFIX = "i600k:"
+
+def _iterations_for(salt: str) -> int:
+    return PBKDF2_ITERATIONS if salt.startswith(_SALT_PREFIX) else LEGACY_ITERATIONS
+
 def hash_password(password: str, salt: str = None) -> Tuple[str, str]:
     """
-    Hashes a password using PBKDF2-HMAC-SHA256 with 200,000 iterations
-    and a cryptographically secure 16-byte random salt.
+    Hashes a password using PBKDF2-HMAC-SHA256 with a cryptographically secure 16-byte random salt.
+    New salts use 600,000 iterations; legacy salts (no prefix) keep their original 200,000.
     """
     if not salt:
-        salt = secrets.token_hex(16)
+        salt = _SALT_PREFIX + secrets.token_hex(16)
     key = hashlib.pbkdf2_hmac(
         "sha256",
         password.encode("utf-8"),
         salt.encode("utf-8"),
-        200_000
+        _iterations_for(salt)
     )
     return key.hex(), salt
+
+def needs_rehash(salt: str) -> bool:
+    """True for hashes made with an older work factor; re-hash them after a successful login."""
+    return not (salt or "").startswith(_SALT_PREFIX)
 
 def verify_password(password: str, stored_hash: str, salt: str) -> bool:
     """
@@ -94,8 +107,8 @@ def decode_password_hash(encoded: str) -> Tuple[str, str]:
         raise ValueError("ADMIN_PASSWORD_HASH must look like pbkdf2_sha256$<salt>$<64 hex chars>")
     return pw_hash, salt
 
-_DUMMY_SALT = secrets.token_hex(16)
-_DUMMY_HASH = hashlib.pbkdf2_hmac("sha256", secrets.token_bytes(16), _DUMMY_SALT.encode("utf-8"), 200_000).hex()
+_DUMMY_SALT = _SALT_PREFIX + secrets.token_hex(16)
+_DUMMY_HASH = hashlib.pbkdf2_hmac("sha256", secrets.token_bytes(16), _DUMMY_SALT.encode("utf-8"), PBKDF2_ITERATIONS).hex()
 
 def burn_password_check(password: str) -> bool:
     """Spends the same work as a real verification so unknown emails can't be told apart by timing."""
@@ -106,6 +119,10 @@ def captcha_signature(token: str) -> str:
     """The HMAC part of a captcha token, used to make each token single-use."""
     parts = (token or "").split(".")
     return parts[2] if len(parts) == 3 else ""
+
+def hash_session_token(token: str) -> str:
+    """Sessions are stored as SHA-256 digests, so a leaked database can't be replayed as live sessions."""
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
 
 def generate_session_token() -> str:
     """Generates a URL-safe, high-entropy 32-byte session token."""

@@ -144,6 +144,13 @@ def send_discord_alert(event: IncidentEvent, token: Optional[Token] = None) -> b
         print(f"[!] Failed to deliver Discord webhook: {e}")
         return False
 
+def mask_email(email: str) -> str:
+    """j***@example.com: enough to recognise a sign-up, not enough to harvest addresses."""
+    local, _, domain = (email or "").partition("@")
+    if not domain:
+        return "***"
+    return f"{local[:1]}***@{domain}"
+
 def send_discord_signup_alert(
     user: User,
     client_ip: str,
@@ -164,33 +171,28 @@ def send_discord_signup_alert(
     embed_color = 0xF59E0B if is_admin else 0x10B981
     role_badge = "👑 MASTER ADMINISTRATOR" if is_admin else "🛡️ SECURITY OPERATOR"
 
+    # Data minimization: this channel may be seen by people who shouldn't hold operators' personal
+    # data. Send a masked email, country-level origin and network ASN only; full details stay in the
+    # admin audit log. No IP address, city or user agent leaves the server.
     geo = geo_data or {}
     country = geo.get("country", "Unknown")
-    city = geo.get("city", "Unknown")
-    region = geo.get("region", "Unknown")
-    isp = geo.get("isp", "Unknown")
     asn = geo.get("asn", "Unknown")
-    location_str = f"{city}, {region}, {country}" if country != "Unknown" else "Unresolved / Local Network"
+    origin = country if country not in ("Unknown", "") else "Unresolved"
 
     embed_fields = [
         {
             "name": "👤 Operator Account",
-            "value": f"**Email:** `{user.email}`\n**Role:** `{role_badge}`\n**User ID:** `{user.id}`",
+            "value": f"**Email:** `{mask_email(user.email)}`\n**Role:** `{role_badge}`",
             "inline": False
         },
         {
-            "name": "🌐 Network Origin & Provider",
-            "value": f"**IP Address:** `{client_ip}`\n**Location:** {location_str}\n**ISP / ASN:** {isp} ({asn})",
+            "name": "🌐 Network Origin",
+            "value": f"**Country:** {origin}\n**Network:** {asn}\n**Client:** `{client_tool}`",
             "inline": False
         },
         {
-            "name": "💻 Client Environment & Tool",
-            "value": f"**Detected Client:** `{client_tool}`\n**User-Agent:** ```{user_agent[:200] if user_agent else 'Unknown'}```",
-            "inline": False
-        },
-        {
-            "name": "🔒 Security Attestation",
-            "value": "✅ **Anti-Bot Honeypot:** `PASSED`\n✅ **Visual CAPTCHA:** `VERIFIED`\n✅ **Password Encryption:** `PBKDF2-HMAC-SHA256 (310k Rounds)`",
+            "name": "🔒 Checks at Sign-Up",
+            "value": "Bot trap and single-use captcha passed · password stored as PBKDF2-HMAC-SHA256 (600k iterations)",
             "inline": True
         },
         {
@@ -205,7 +207,7 @@ def send_discord_signup_alert(
         "avatar_url": "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/svgs/solid/shield-halved.svg",
         "embeds": [
             {
-                "title": f"✨ NEW OPERATOR REGISTRATION // {user.email}",
+                "title": f"✨ NEW OPERATOR REGISTRATION // {mask_email(user.email)}",
                 "description": f"A new operator account has been provisioned on HoneyGrid Sentinel with role **{user.role.upper()}**.",
                 "color": embed_color,
                 "fields": embed_fields,
