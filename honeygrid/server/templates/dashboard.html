@@ -475,7 +475,7 @@
             <button class="btn sm" type="button" data-close aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
         </div>
         <div class="dlg-body">
-            <p style="color:var(--muted)">Addresses here score zero when they trip a decoy and can never be isolated, so your own tests never lock you out.</p>
+            <p style="color:var(--muted)">Addresses on your list score zero when they trip your decoys, and no operator can isolate them, so your own tests never lock you out. Each operator keeps their own list.</p>
             <div class="you">
                 <div><small>This workstation</small><code id="detected-client-ip">Detecting…</code></div>
                 <button class="btn sm" type="button" id="add-current-ip">Add this address</button>
@@ -1056,12 +1056,13 @@ ${(stats.top_countries || []).length ? stats.top_countries.map((c) => '  ' + c.c
             const ok = await confirmAction('Remove from safe list', `Remove ${ip}? Future trips from it will be scored and can be isolated.`, 'Remove');
             if (!ok) return;
             try {
-                await fetch('/api/safelist/remove', {
+                const res = await fetch('/api/safelist/remove', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ip: ip })
                 });
-                toast(`${ip} removed from the safe list.`, 'ok');
+                const data = await res.json();
+                toast(data.message || (res.ok ? `${ip} removed from the safe list.` : 'Could not remove the address.'), res.ok ? 'ok' : 'error');
                 fetchSafeList();
             } catch (e) {
                 toast('Could not remove the address: ' + e.message, 'error');

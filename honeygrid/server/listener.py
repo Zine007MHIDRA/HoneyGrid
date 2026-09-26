@@ -1,11 +1,15 @@
 import os
+import re
+import html
 import base64
 import json
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, Request, Response, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from honeygrid.config import settings
 from honeygrid.database import (
     init_db, get_token, record_incident, list_tokens, list_incidents,
@@ -13,18 +17,19 @@ from honeygrid.database import (
     get_dashboard_stats, update_incident_telemetry,
     create_user, get_user_by_email, get_user_auth_record_by_email, get_user_by_id,
     create_session, get_user_by_session, delete_session,
-    add_safe_ip, remove_safe_ip, list_safe_ips, is_safe_ip,
-    list_audit_logs
+    add_safe_ip, remove_safe_ip, list_safe_ips, is_safe_ip, is_safe_ip_for_owner,
+    list_audit_logs, consume_captcha
 )
 from honeygrid.models import IncidentEvent, Token, BrowserTelemetry, User, UserRegister, UserLogin
-from honeygrid.core.auth import hash_password, verify_password, generate_captcha, verify_captcha
-from honeygrid.core.rate_limit import login_limiter
-from honeygrid.core.fingerprint import extract_client_ip, identify_client_tool
+from honeygrid.core.auth import hash_password, verify_password, generate_captcha, verify_captcha, burn_password_check, captcha_signature
+from honeygrid.core.rate_limit import login_limiter, account_limiter, register_limiter, captcha_limiter
+from honeygrid.core.fingerprint import extract_client_ip, identify_client_tool, ip_in_networks
+from honeygrid.core.redact import redact_headers
 from honeygrid.core.audit import log_audit_event
 from honeygrid.core.geo import lookup_ip_geolocation
 from honeygrid.core.threat_intel import analyze_ip_threat
 from honeygrid.alerts.discord import send_discord_alert, send_discord_signup_alert
-from honeygrid.core.containment import block_ip
+from honeygrid.core.containment import block_ip, validate_containment_ip
 from honeygrid.core.generator import (
     create_web_canary_token, create_aws_honeytoken, create_env_honeytoken,
     create_git_honeytoken, create_keepass_honeytoken, generate_token_download_payload
@@ -34,6 +39,11 @@ from honeygrid.core.pdf_canary import create_canary_pdf
 # Ensure DB initialized on startup
 init_db()
 
+if not settings.SECRET_KEY_CONFIGURED:
+    print("[!] HONEYGRID_SECRET_KEY is not set. "
+          + ("Sign-in and registration are disabled until it is configured." if settings.IS_PRODUCTION
+             else "Using a random per-process key (fine for local development only)."))
+
 app = FastAPI(
     title="HoneyGrid Sentinel",
     description="Deception Sentinel & Multi-Tenant Incident Response SOC Service",
@@ -41,10 +51,18 @@ app = FastAPI(
 )
 
 def is_https_request(request: Request) -> bool:
-    """Detects whether request reached service over HTTPS (direct or through cloud reverse proxy)."""
-    proto = request.headers.get("x-forwarded-proto", "").lower()
-    ssl = request.headers.get("x-forwarded-ssl", "").lower()
-    return request.url.scheme == "https" or proto == "https" or ssl == "on"
+    """True when the request reached the service over HTTPS. Forwarded-protocol headers are only
+    believed from a configured proxy; production (Vercel) is always HTTPS at the edge."""
+    if request.url.scheme == "https" or settings.IS_PRODUCTION:
+        return True
+    peer = request.client.host if request.client else ""
+    if peer and ip_in_networks(peer, settings.get_trusted_proxies() + settings.get_cloudflare_proxies()):
+        proto = request.headers.get("x-forwarded-proto", "").lower()
+        ssl = request.headers.get("x-forwarded-ssl", "").lower()
+        return proto == "https" or ssl == "on"
+    return False
+
+NO_STORE_PREFIXES = ("/api/auth", "/api/stats", "/api/incidents", "/api/tokens", "/api/safelist", "/api/audit-logs", "/api/contain")
 
 @app.middleware("http")
 async def enterprise_security_headers_middleware(request: Request, call_next):
@@ -62,6 +80,12 @@ async def enterprise_security_headers_middleware(request: Request, call_next):
         response.headers["Server"] = "nginx/1.24.0 (Ubuntu)"
         if "x-powered-by" in response.headers:
             del response.headers["x-powered-by"]
+        # Headers an ordinary nginx site would send; they also contain anything reflected on the decoy page
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+        )
     else:
         # OPERATOR DEFENSE HEADERS: Block clickjacking, MIME sniffing, and unauthorized framing
         response.headers["X-Frame-Options"] = "DENY"
@@ -70,7 +94,7 @@ async def enterprise_security_headers_middleware(request: Request, call_next):
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com; "
+            "script-src 'self' 'unsafe-inline' https://unpkg.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https://*.cartocdn.com https://*.openstreetmap.org; "
@@ -78,6 +102,11 @@ async def enterprise_security_headers_middleware(request: Request, call_next):
             "frame-ancestors 'none'; "
             "base-uri 'self';"
         )
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        if path.startswith(NO_STORE_PREFIXES) or path in ("/login", "/dashboard"):
+            response.headers.setdefault("Cache-Control", "no-store")
+        if path in ("/login", "/dashboard"):
+            response.headers["X-Robots-Tag"] = "noindex, nofollow"
         if is_https_request(request):
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
 
@@ -182,7 +211,8 @@ def process_incident_async(
             threat_profile = {"threat_score": 15, "connection_type": "Direct Unknown", "is_vpn_proxy": False, "is_tor": False}
 
         # Check if caller IP is on Operator Safe List
-        is_safe = is_safe_ip(reported_ip)
+        token = get_token(token_id)
+        is_safe = is_safe_ip_for_owner(reported_ip, token.owner_id if token else None)
         threat_score = 0 if is_safe else threat_profile.get("threat_score", 15)
         connection_type = "Authorized Operator Test" if is_safe else threat_profile.get("connection_type", "Unknown")
         mitre = "Audit / Authorized Operator Validation" if is_safe else "T1552: Unsecured Credentials"
@@ -211,7 +241,6 @@ def process_incident_async(
             mitre_technique=mitre
         )
         
-        token = get_token(token_id)
         record_incident(event)
         
         try:
@@ -282,9 +311,46 @@ async def health_check():
 # Authentication & Identity Endpoints
 # -------------------------------------------------------------
 
+AUTH_UNAVAILABLE = {"status": "error", "message": "Sign-in is temporarily unavailable. The server is missing its secret key configuration."}
+TOO_MANY_ATTEMPTS = "Too many attempts. Wait a few minutes and try again."
+EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
+
+def auth_configured() -> bool:
+    """In production the captcha key must come from the environment, or every instance signs with its own."""
+    return settings.SECRET_KEY_CONFIGURED or not settings.IS_PRODUCTION
+
+def check_captcha(answer: Optional[str], token: Optional[str]) -> bool:
+    """Valid, unexpired AND never used before. Every presented token is burned, right or wrong."""
+    if not answer or not token:
+        return False
+    sig = captcha_signature(token)
+    if not sig or not consume_captcha(sig, time.time() + 330):
+        return False
+    return verify_captcha(answer, token, settings.HONEYGRID_SECRET_KEY)
+
+def set_session_cookie(resp: Response, request: Request, token: str, hours: int):
+    resp.set_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        value=token,
+        max_age=hours * 3600,
+        httponly=True,
+        samesite="strict",
+        secure=is_https_request(request)
+    )
+
+def too_many(remaining: int) -> JSONResponse:
+    return JSONResponse({"status": "error", "message": TOO_MANY_ATTEMPTS}, status_code=429, headers={"Retry-After": str(max(1, remaining))})
+
 @app.get("/api/auth/captcha")
-async def api_captcha():
+async def api_captcha(request: Request):
     """Generates a dynamic visual verification challenge with a signed HMAC token."""
+    if not auth_configured():
+        return JSONResponse(AUTH_UNAVAILABLE, status_code=503)
+    client_ip, _ = extract_client_ip(request)
+    locked, remaining = captcha_limiter.is_locked(client_ip)
+    if locked:
+        return too_many(remaining)
+    captcha_limiter.record_failure(client_ip)
     code, svg, token = generate_captcha(settings.HONEYGRID_SECRET_KEY)
     return {
         "status": "success",
@@ -295,8 +361,17 @@ async def api_captcha():
 
 @app.post("/api/auth/register")
 async def api_register(data: UserRegister, request: Request, background_tasks: BackgroundTasks):
+    if not auth_configured():
+        return JSONResponse(AUTH_UNAVAILABLE, status_code=503)
     client_ip, _ = extract_client_ip(request)
     email = data.email.strip().lower() if data.email else ""
+
+    # 0. Registration rate limit: every attempt counts, successful or not
+    locked, remaining = register_limiter.is_locked(client_ip)
+    if locked:
+        log_audit_event("AUTH_REGISTER_RATE_LIMIT", "BLOCKED", actor=email or "unknown", client_ip=client_ip)
+        return too_many(remaining)
+    register_limiter.record_failure(client_ip)
 
     # 1. Anti-bot honeypot check
     if data.hp_decoy_field:
@@ -304,27 +379,26 @@ async def api_register(data: UserRegister, request: Request, background_tasks: B
         return JSONResponse({"status": "error", "message": "Automated bot activity detected and blocked."}, status_code=403)
 
     # 2. CAPTCHA verification
-    if not data.captcha_answer or not data.captcha_token or not verify_captcha(data.captcha_answer, data.captcha_token, settings.HONEYGRID_SECRET_KEY):
+    if not check_captcha(data.captcha_answer, data.captcha_token):
         log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email or "unknown", client_ip=client_ip, metadata={"reason": "captcha_invalid"})
         return JSONResponse({"status": "error", "message": "Security verification code is incorrect or expired. Please reload challenge."}, status_code=400)
 
-    password = data.password
-    if not email or "@" not in email:
+    password = data.password or ""
+    if not email or len(email) > 254 or not EMAIL_PATTERN.match(email):
         log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email or "unknown", client_ip=client_ip, metadata={"reason": "invalid_email"})
-        return JSONResponse({"status": "error", "message": "Valid corporate or personal email required"}, status_code=400)
-    if len(password) < 6:
-        log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email, client_ip=client_ip, metadata={"reason": "password_too_short"})
-        return JSONResponse({"status": "error", "message": "Password must be at least 6 characters"}, status_code=400)
-    
-    existing = get_user_by_email(email)
-    if existing:
-        log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email, client_ip=client_ip, metadata={"reason": "user_already_exists"})
-        return JSONResponse({"status": "error", "message": "An operator account with this email already exists. Please sign in."}, status_code=400)
-    
-    # Auto-grant admin role if email matches settings.ADMIN_EMAIL
-    role = "admin" if email == settings.ADMIN_EMAIL.lower() else "user"
-    pw_hash, salt = hash_password(password)
-    user = create_user(email=email, password_hash=pw_hash, salt=salt, role=role)
+        return JSONResponse({"status": "error", "message": "Enter a valid email address."}, status_code=400)
+    if len(password) < 12 or len(password) > 256:
+        log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email, client_ip=client_ip, metadata={"reason": "password_length"})
+        return JSONResponse({"status": "error", "message": "Passwords must be 12 to 256 characters long."}, status_code=400)
+
+    # The admin address is reserved: that account only ever comes from the environment seed
+    if get_user_by_email(email) or (settings.ADMIN_EMAIL and email == settings.ADMIN_EMAIL):
+        log_audit_event("AUTH_REGISTER_FAILURE", "FAILURE", actor=email, client_ip=client_ip, metadata={"reason": "email_unavailable"})
+        return JSONResponse({"status": "error", "message": "An account with this email already exists. Sign in instead."}, status_code=400)
+
+    # Registration never grants privileges
+    pw_hash, salt = await run_in_threadpool(hash_password, password)
+    user = create_user(email=email, password_hash=pw_hash, salt=salt, role="user")
     
     # Create persistent session
     session_token = create_session(user.id, expire_hours=settings.SESSION_EXPIRE_HOURS)
@@ -350,33 +424,23 @@ async def api_register(data: UserRegister, request: Request, background_tasks: B
         "user": user.model_dump(),
         "redirect": "/dashboard"
     })
-    resp.set_cookie(
-        key=settings.SESSION_COOKIE_NAME,
-        value=session_token,
-        max_age=settings.SESSION_EXPIRE_HOURS * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=is_https_request(request)
-    )
+    set_session_cookie(resp, request, session_token, settings.SESSION_EXPIRE_HOURS)
     return resp
 
 @app.post("/api/auth/login")
 async def api_login(data: UserLogin, request: Request):
+    if not auth_configured():
+        return JSONResponse(AUTH_UNAVAILABLE, status_code=503)
     client_ip, _ = extract_client_ip(request)
     email = data.email.strip().lower() if data.email else ""
 
-    # 0. Brute-Force Rate Limiting & Lockout Check
-    is_locked, remaining = login_limiter.is_locked(client_ip)
-    if is_locked:
-        log_audit_event("RATE_LIMIT_LOCKOUT", "BLOCKED", actor=email or "unknown", client_ip=client_ip, metadata={"remaining_seconds": remaining})
-        return JSONResponse(
-            {
-                "status": "error",
-                "message": f"Too many failed login attempts. Temporarily locked for {remaining} seconds to safeguard your account."
-            },
-            status_code=429,
-            headers={"Retry-After": str(remaining)}
-        )
+    # 0. Brute-force limits: per client IP and per account (across all IPs)
+    ip_locked, ip_remaining = login_limiter.is_locked(client_ip)
+    acct_locked, acct_remaining = account_limiter.is_locked(email) if email else (False, 0)
+    if ip_locked or acct_locked:
+        log_audit_event("RATE_LIMIT_LOCKOUT", "BLOCKED", actor=email or "unknown", client_ip=client_ip,
+                        metadata={"scope": "account" if acct_locked else "ip"})
+        return too_many(max(ip_remaining, acct_remaining))
 
     # 1. Anti-bot honeypot check
     if data.hp_decoy_field:
@@ -384,58 +448,51 @@ async def api_login(data: UserLogin, request: Request):
         log_audit_event("AUTH_LOGIN_BOT_BLOCKED", "BLOCKED", actor=email or "unknown", client_ip=client_ip)
         return JSONResponse({"status": "error", "message": "Automated bot activity detected and blocked."}, status_code=403)
 
-    # 2. CAPTCHA verification
-    if not data.captcha_answer or not data.captcha_token or not verify_captcha(data.captcha_answer, data.captcha_token, settings.HONEYGRID_SECRET_KEY):
+    # 2. CAPTCHA verification (single-use); failures count toward the IP limit
+    if not check_captcha(data.captcha_answer, data.captcha_token):
+        login_limiter.record_failure(client_ip)
         log_audit_event("AUTH_LOGIN_CAPTCHA_FAIL", "FAILURE", actor=email or "unknown", client_ip=client_ip)
         return JSONResponse({"status": "error", "message": "Security verification code is incorrect or expired. Please reload challenge."}, status_code=400)
 
-    password = data.password
-    if not email or not password:
+    password = data.password or ""
+    if not email or not password or len(password) > 256:
         log_audit_event("AUTH_LOGIN_FAILURE", "FAILURE", actor=email or "unknown", client_ip=client_ip, metadata={"reason": "missing_credentials"})
         return JSONResponse({"status": "error", "message": "Email and password required"}, status_code=400)
-    
-    record = get_user_auth_record_by_email(email)
-    if not record or not verify_password(password, record["password_hash"], record["salt"]):
-        failures = login_limiter.record_failure(client_ip)
-        log_audit_event("AUTH_LOGIN_FAILURE", "FAILURE", actor=email, client_ip=client_ip, metadata={"failures": failures})
-        remaining_attempts = max(0, 5 - failures)
-        msg = "Invalid email or access passphrase."
-        if 0 < remaining_attempts < 4:
-            msg += f" {remaining_attempts} attempt(s) remaining before temporary lockout."
-        return JSONResponse({"status": "error", "message": msg}, status_code=401)
 
-    # Successful login: reset rate limit strikes
+    # Same amount of work whether or not the account exists, off the event loop
+    record = get_user_auth_record_by_email(email)
+    if record:
+        valid = await run_in_threadpool(verify_password, password, record["password_hash"], record["salt"])
+    else:
+        valid = await run_in_threadpool(burn_password_check, password)
+    if not valid:
+        login_limiter.record_failure(client_ip)
+        account_limiter.record_failure(email)
+        log_audit_event("AUTH_LOGIN_FAILURE", "FAILURE", actor=email, client_ip=client_ip)
+        return JSONResponse({"status": "error", "message": "Invalid email or password."}, status_code=401)
+
+    # Successful login: reset strikes
     login_limiter.record_success(client_ip)
-    
-    user_role = record["role"]
-    if email == settings.ADMIN_EMAIL.lower():
-        user_role = "admin"
-        
+    account_limiter.record_success(email)
+
     user = User(
         id=record["id"],
         email=record["email"],
-        role=user_role,
+        role=record["role"],
         created_at=record["created_at"]
     )
-    
-    expire_hours = settings.SESSION_EXPIRE_HOURS if data.remember_me else 24
+
+    expire_hours = settings.SESSION_EXPIRE_HOURS if data.remember_me else 12
     session_token = create_session(user.id, expire_hours=expire_hours)
     log_audit_event("AUTH_LOGIN_SUCCESS", "SUCCESS", actor=user.email, client_ip=client_ip, target=str(user.id), metadata={"role": user.role})
-    
+
     resp = JSONResponse({
         "status": "success",
         "message": "Identity authenticated",
         "user": user.model_dump(),
         "redirect": "/dashboard"
     })
-    resp.set_cookie(
-        key=settings.SESSION_COOKIE_NAME,
-        value=session_token,
-        max_age=expire_hours * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=is_https_request(request)
-    )
+    set_session_cookie(resp, request, session_token, expire_hours)
     return resp
 
 @app.post("/api/auth/logout")
@@ -443,6 +500,9 @@ async def api_logout(request: Request):
     client_ip, _ = extract_client_ip(request)
     user = get_current_user(request)
     session_token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    auth_header = request.headers.get("authorization", "")
+    if not session_token and auth_header.startswith("Bearer "):
+        session_token = auth_header[7:].strip()
     if session_token:
         delete_session(session_token)
     log_audit_event("AUTH_LOGOUT", "SUCCESS", actor=user.email if user else "session", client_ip=client_ip)
@@ -474,9 +534,9 @@ async def api_get_safelist(request: Request):
     client_ip, _ = extract_client_ip(request)
     return {
         "status": "success",
-        "safe_ips": list_safe_ips(),
+        "safe_ips": list_safe_ips(owner_id=user.id, is_admin=user.is_admin),
         "client_ip": client_ip,
-        "is_client_safe": is_safe_ip(client_ip)
+        "is_client_safe": is_safe_ip_for_owner(client_ip, user.id)
     }
 
 @app.post("/api/safelist/add")
@@ -486,14 +546,14 @@ async def api_add_safelist(request: Request, data: Dict[str, Any]):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     
     client_ip, _ = extract_client_ip(request)
-    ip = data.get("ip") or client_ip
-    label = data.get("label", f"Operator Workstation ({user.email})")
-    
-    success = add_safe_ip(ip, label=label, added_by=user.email)
+    ip = str(data.get("ip") or client_ip).strip()
+    label = str(data.get("label") or "Operator workstation")[:120]
+
+    success = add_safe_ip(ip, label=label, added_by=user.email, owner_id=user.id)
     log_audit_event("SAFELIST_ADD", "SUCCESS" if success else "FAILURE", actor=user.email, client_ip=client_ip, target=ip, metadata={"label": label})
     if success:
-        return {"status": "success", "message": f"IP {ip} added to Operator Safe List."}
-    return JSONResponse({"status": "error", "message": "Invalid IP address"}, status_code=400)
+        return {"status": "success", "message": f"{ip} added to your safe list."}
+    return JSONResponse({"status": "error", "message": "Enter a single valid IP address."}, status_code=400)
 
 @app.post("/api/safelist/remove")
 async def api_remove_safelist(request: Request, data: Dict[str, Any]):
@@ -506,9 +566,11 @@ async def api_remove_safelist(request: Request, data: Dict[str, Any]):
     if not ip:
         return JSONResponse({"status": "error", "message": "IP required"}, status_code=400)
         
-    removed = remove_safe_ip(ip)
-    log_audit_event("SAFELIST_REMOVE", "SUCCESS" if removed else "NOT_FOUND", actor=user.email, client_ip=client_ip, target=ip)
-    return {"status": "success", "removed": removed, "message": f"IP {ip} removed from Operator Safe List."}
+    removed = remove_safe_ip(str(ip), owner_id=user.id, is_admin=user.is_admin)
+    log_audit_event("SAFELIST_REMOVE", "SUCCESS" if removed else "NOT_FOUND", actor=user.email, client_ip=client_ip, target=str(ip))
+    if not removed:
+        return JSONResponse({"status": "error", "removed": False, "message": "That address is not on your safe list."}, status_code=404)
+    return {"status": "success", "removed": True, "message": f"{ip} removed from your safe list."}
 
 @app.get("/api/stats")
 async def api_stats(request: Request):
@@ -549,7 +611,8 @@ async def api_incident_detail(request: Request, incident_id: int):
     if not incident:
         return JSONResponse({"error": "Not found"}, status_code=404)
     timeline = list_incidents_by_ip(incident.attacker_ip, user_id=user.id, is_admin=user.is_admin)
-    safelisted = is_safe_ip(incident.attacker_ip)
+    owner_token = get_token(incident.token_id)
+    safelisted = is_safe_ip_for_owner(incident.attacker_ip, owner_token.owner_id if owner_token else None)
     tokens_touched = list(dict.fromkeys(i.token_id for i in timeline))
     return {
         "incident": incident.model_dump(),
@@ -573,7 +636,7 @@ async def api_get_audit_logs(request: Request, limit: int = 50, action: Optional
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    logs = list_audit_logs(limit=limit, action=action)
+    logs = list_audit_logs(limit=limit, action=action, actor=None if user.is_admin else user.email)
     return {"status": "success", "audit_logs": logs}
 
 @app.get("/api/tokens")
@@ -656,28 +719,38 @@ async def api_isolate_ip(request: Request, data: Dict[str, Any]):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     client_ip, _ = extract_client_ip(request)
-    ip = data.get("ip")
+    ip = validate_containment_ip(data.get("ip"))
     if not ip:
-        return JSONResponse({"status": "error", "message": "IP required"}, status_code=400)
-        
+        return JSONResponse({"status": "error", "applied": False, "message": "Only a single public IP address can be isolated."}, status_code=400)
+    if ip == validate_containment_ip(client_ip):
+        return JSONResponse({"status": "error", "applied": False, "message": "You can't isolate the address you're connected from."}, status_code=400)
+
+    # Operators may only contain addresses that tripped their own decoys
+    if not user.is_admin and not list_incidents_by_ip(ip, user_id=user.id, is_admin=False, limit=1):
+        log_audit_event("CONTAINMENT_BLOCKED", "DENIED", actor=user.email, client_ip=client_ip, target=ip, metadata={"reason": "not_in_tenant_incidents"})
+        return JSONResponse({"status": "error", "applied": False, "message": "You can only isolate addresses that tripped your own decoys."}, status_code=403)
+
     log_audit_event("CONTAINMENT_ATTEMPT", "ATTEMPT", actor=user.email, client_ip=client_ip, target=ip)
 
-    # Operator Safety: Block isolation if IP is on Safe List
+    # Operator Safety: Block isolation if IP is on any Safe List
     if is_safe_ip(ip):
         log_audit_event("CONTAINMENT_BLOCKED", "BLOCKED_SAFELIST", actor=user.email, client_ip=client_ip, target=ip, metadata={"reason": "safelist"})
         return JSONResponse({
             "status": "error",
             "applied": False,
-            "message": f"IP {ip} is on the Operator Safe List. Auto-containment blocked to safeguard operator connectivity."
+            "message": f"{ip} is on an operator safe list, so it can't be isolated."
         }, status_code=400)
 
     result = block_ip(ip)
     log_audit_event("CONTAINMENT_RESULT", "SUCCESS" if result.get("applied") else "NO_OP", actor=user.email, client_ip=client_ip, target=ip, metadata=result)
-    return result
+    return {k: v for k, v in result.items() if k != "command"}
 
 # -------------------------------------------------------------
 # Deception & Honeytoken Listener Endpoints (PUBLIC CALLBACKS)
 # -------------------------------------------------------------
+
+TOKEN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+html_escape = html.escape
 
 @app.api_route("/t/{token_id}", methods=["GET", "POST", "HEAD"])
 async def trigger_canary(
@@ -689,8 +762,13 @@ async def trigger_canary(
     Primary canary webhook endpoint.
     PUBLIC ACCESS: Intruder callbacks MUST trip freely without authentication!
     """
+    # Unknown shapes get the same deceptive 401, with nothing reflected and nothing recorded
+    if not TOKEN_ID_PATTERN.match(token_id):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized", "message": "Invalid token or expired session credential."})
+
     raw_ip, is_local = extract_client_ip(request)
-    headers_dict = dict(request.headers)
+    # Credentials a victim's browser sends (e.g. an operator's session cookie) are never stored
+    headers_dict = redact_headers(dict(request.headers))
     user_agent = headers_dict.get("user-agent", "")
     client_tool = identify_client_tool(user_agent)
     
@@ -718,7 +796,7 @@ async def trigger_canary(
     if "text/html" in accept:
         template = get_template("decoy.html")
         if template:
-            html = template.replace("{{ token_id }}", token_id)
+            html = template.replace("{{ token_id_js }}", json.dumps(token_id)).replace("{{ token_id }}", html_escape(token_id))
             return HTMLResponse(content=html, status_code=401)
 
     # 3. For API or CLI tools (curl, python), return deceptive JSON error
@@ -734,6 +812,8 @@ async def receive_browser_telemetry(
     request: Request
 ):
     """Silent collector endpoint for client-side GPU, screen, and WebRTC LAN leaks."""
+    if not TOKEN_ID_PATTERN.match(token_id):
+        return {"status": "received"}
     client_ip, is_local = extract_client_ip(request)
     update_incident_telemetry(token_id, telemetry, client_ip=client_ip, is_local=is_local)
     return {"status": "received"}

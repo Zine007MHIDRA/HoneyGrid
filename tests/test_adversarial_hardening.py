@@ -107,19 +107,19 @@ class TestAdversarialHardening(unittest.TestCase):
         is_locked_after, _ = limiter2.is_locked(test_ip)
         self.assertFalse(is_locked_after)
 
-    def test_safelist_immunity_from_rate_limit(self):
-        """Safe-listed IPs must be immune from brute-force rate limit lockout."""
+    def test_safelist_does_not_bypass_rate_limit(self):
+        """A safe-listed IP is still locked out after repeated failures (safe listing is not a brute-force license)."""
         safe_ip = "192.0.2.200"
         add_safe_ip(safe_ip, label="Admin Office", added_by="admin@test.corp")
         limiter = LoginRateLimiter(max_attempts=2, window_seconds=60, lockout_seconds=60)
 
         limiter.record_failure(safe_ip)
         limiter.record_failure(safe_ip)
-        limiter.record_failure(safe_ip)
 
         is_locked, remaining = limiter.is_locked(safe_ip)
-        self.assertFalse(is_locked, "Safe-listed IP must never be locked out!")
-        self.assertEqual(remaining, 0)
+        self.assertTrue(is_locked, "Safe-listed IPs must still be rate limited")
+        self.assertGreater(remaining, 0)
+        limiter.record_success(safe_ip)
 
     def test_safelist_immunity_from_containment(self):
         """Safe-listed IPs cannot be contained or isolated."""
@@ -180,7 +180,8 @@ class TestAdversarialHardening(unittest.TestCase):
             created_at="2026-09-22T20:46:00Z"
         )
         
-        with patch("requests.post") as mock_post:
+        with patch("requests.post") as mock_post, \
+                patch.object(settings, "DISCORD_SIGNUP_WEBHOOK_URL", "https://discord.com/api/webhooks/0/test-only"):
             mock_post.return_value.status_code = 204
             
             res = send_discord_signup_alert(

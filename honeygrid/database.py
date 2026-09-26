@@ -1,5 +1,6 @@
 import os
 import time
+import ipaddress
 import sqlite3
 import json
 from typing import List, Optional, Dict, Any, Tuple
@@ -7,7 +8,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from honeygrid.config import settings
 from honeygrid.models import Token, IncidentEvent, BrowserTelemetry, User
-from honeygrid.core.auth import generate_session_token, generate_user_id
+from honeygrid.core.auth import generate_session_token, generate_user_id, decode_password_hash
+from honeygrid.core.redact import redact_headers, headers_need_redaction
 
 def get_db_path() -> str:
     """Returns database file path, auto-switching to /tmp if running in serverless environments like Vercel or on read-only filesystems."""
@@ -208,6 +210,81 @@ def init_db():
     )
     """)
 
+    # Solved or attempted captcha tokens, so each one works exactly once
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS used_captchas (
+        sig TEXT PRIMARY KEY,
+        expires_at REAL NOT NULL
+    )
+    """)
+
+    _migrate_safe_ips_to_tenants(cursor)
+    _redact_stored_credentials(cursor)
+    conn.commit()
+    conn.close()
+    seed_admin_from_env()
+
+def _migrate_safe_ips_to_tenants(cursor: sqlite3.Cursor):
+    """safe_ips was one global list keyed by IP; entries now belong to the operator who added them.
+    Rows with no owner (legacy entries whose author can't be resolved) stay global and admin-managed."""
+    cursor.execute("PRAGMA table_info(safe_ips)")
+    cols = {row["name"] for row in cursor.fetchall()}
+    if "owner_id" in cols:
+        return
+    cursor.execute("""
+    CREATE TABLE safe_ips_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT NOT NULL,
+        owner_id TEXT,
+        label TEXT NOT NULL,
+        added_at TEXT NOT NULL,
+        added_by TEXT NOT NULL,
+        UNIQUE(ip, owner_id)
+    )
+    """)
+    cursor.execute("""
+        INSERT INTO safe_ips_v2 (ip, owner_id, label, added_at, added_by)
+        SELECT s.ip, u.id, s.label, s.added_at, s.added_by
+        FROM safe_ips s LEFT JOIN users u ON LOWER(u.email) = LOWER(s.added_by)
+    """)
+    cursor.execute("DROP TABLE safe_ips")
+    cursor.execute("ALTER TABLE safe_ips_v2 RENAME TO safe_ips")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_safe_ips_ip ON safe_ips(ip)")
+
+def _redact_stored_credentials(cursor: sqlite3.Cursor):
+    """Scrubs cookies/authorization headers captured before redaction existed."""
+    cursor.execute("SELECT id, raw_headers FROM incidents WHERE raw_headers LIKE '%cookie%' OR raw_headers LIKE '%authorization%' OR raw_headers LIKE '%x-api-key%'")
+    for row in cursor.fetchall():
+        try:
+            headers = json.loads(row["raw_headers"])
+        except Exception:
+            continue
+        if isinstance(headers, dict) and headers_need_redaction(headers):
+            cursor.execute("UPDATE incidents SET raw_headers = ? WHERE id = ?", (json.dumps(redact_headers(headers)), row["id"]))
+
+def seed_admin_from_env():
+    """Creates or updates the admin from ADMIN_EMAIL + ADMIN_PASSWORD_HASH. The environment is the
+    source of truth, so this also re-creates the admin after a serverless /tmp database reset."""
+    email = settings.ADMIN_EMAIL
+    encoded = settings.ADMIN_PASSWORD_HASH
+    if not email or not encoded:
+        return
+    try:
+        pw_hash, salt = decode_password_hash(encoded)
+    except ValueError as e:
+        print(f"[!] Admin not seeded: {e}")
+        return
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (email,))
+    row = cursor.fetchone()
+    if row:
+        cursor.execute("UPDATE users SET password_hash = ?, salt = ?, role = 'admin' WHERE id = ?", (pw_hash, salt, row["id"]))
+    else:
+        cursor.execute(
+            "INSERT INTO users (id, email, password_hash, salt, role, created_at) VALUES (?, ?, ?, ?, 'admin', ?)",
+            (generate_user_id(), email, pw_hash, salt, datetime.now(timezone.utc).isoformat())
+        )
     conn.commit()
     conn.close()
 
@@ -308,54 +385,103 @@ def delete_session(session_token: str):
 # Operator Safe List (Allowlist) Helpers
 # -------------------------------------------------------------
 
-def add_safe_ip(ip: str, label: str = "Authorized Operator Workstation", added_by: str = "admin") -> bool:
-    clean_ip = ip.strip()
+def normalize_ip(ip: Any) -> Optional[str]:
+    """Canonical form of a single IP address, or None when the value isn't one."""
+    try:
+        return str(ipaddress.ip_address(str(ip).strip()))
+    except (ValueError, TypeError):
+        return None
+
+def add_safe_ip(ip: str, label: str = "Authorized Operator Workstation", added_by: str = "admin", owner_id: Optional[str] = None) -> bool:
+    """Adds an entry to one operator's safe list (owner_id=None makes a global, admin-managed entry)."""
+    clean_ip = normalize_ip(ip)
     if not clean_ip:
         return False
     conn = get_db_connection()
     cursor = conn.cursor()
     now_iso = datetime.now(timezone.utc).isoformat()
+    if owner_id is None:
+        cursor.execute("DELETE FROM safe_ips WHERE ip = ? AND owner_id IS NULL", (clean_ip,))
     cursor.execute("""
-        INSERT OR REPLACE INTO safe_ips (ip, label, added_at, added_by)
-        VALUES (?, ?, ?, ?)
-    """, (clean_ip, label, now_iso, added_by))
+        INSERT OR REPLACE INTO safe_ips (ip, owner_id, label, added_at, added_by)
+        VALUES (?, ?, ?, ?, ?)
+    """, (clean_ip, owner_id, str(label)[:120], now_iso, added_by))
     conn.commit()
     conn.close()
     return True
 
-def remove_safe_ip(ip: str) -> bool:
+def remove_safe_ip(ip: str, owner_id: Optional[str] = None, is_admin: bool = True) -> bool:
+    """Admins remove the IP from every list; operators only from their own."""
+    clean_ip = normalize_ip(ip) or str(ip).strip()
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM safe_ips WHERE ip = ?", (ip.strip(),))
+    if is_admin:
+        cursor.execute("DELETE FROM safe_ips WHERE ip = ?", (clean_ip,))
+    else:
+        cursor.execute("DELETE FROM safe_ips WHERE ip = ? AND owner_id = ?", (clean_ip, owner_id))
     deleted = cursor.rowcount > 0
     conn.commit()
     conn.close()
     return deleted
 
-def list_safe_ips() -> List[Dict[str, Any]]:
+def list_safe_ips(owner_id: Optional[str] = None, is_admin: bool = True) -> List[Dict[str, Any]]:
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM safe_ips ORDER BY added_at DESC")
+    if is_admin:
+        cursor.execute("SELECT ip, owner_id, label, added_at, added_by FROM safe_ips ORDER BY added_at DESC")
+    else:
+        cursor.execute("SELECT ip, owner_id, label, added_at, added_by FROM safe_ips WHERE owner_id = ? ORDER BY added_at DESC", (owner_id,))
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
+def _env_safe_ips() -> List[str]:
+    if not settings.OPERATOR_SAFE_IPS:
+        return []
+    return [normalize_ip(x) or x.strip() for x in settings.OPERATOR_SAFE_IPS.split(",") if x.strip()]
+
 def is_safe_ip(ip: str) -> bool:
-    clean_ip = ip.strip()
+    """True when ANY operator (or the environment) safe-lists this IP. Used to refuse containment,
+    so no tenant can firewall-block another operator's workstation."""
+    clean_ip = normalize_ip(ip) or str(ip).strip()
     if not clean_ip:
         return False
-    # 1. Check environment variable
-    if settings.OPERATOR_SAFE_IPS:
-        configured = [x.strip() for x in settings.OPERATOR_SAFE_IPS.split(",") if x.strip()]
-        if clean_ip in configured:
-            return True
-    # 2. Check safe_ips table
+    if clean_ip in _env_safe_ips():
+        return True
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM safe_ips WHERE ip = ?", (clean_ip,))
+    cursor.execute("SELECT 1 FROM safe_ips WHERE ip = ? LIMIT 1", (clean_ip,))
     row = cursor.fetchone()
     conn.close()
     return row is not None
+
+def is_safe_ip_for_owner(ip: str, owner_id: Optional[str]) -> bool:
+    """True when the IP is safe-listed by the environment, globally, or by this operator.
+    Used for scoring suppression, so one tenant can't silence alerts on another tenant's decoys."""
+    clean_ip = normalize_ip(ip) or str(ip).strip()
+    if not clean_ip:
+        return False
+    if clean_ip in _env_safe_ips():
+        return True
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM safe_ips WHERE ip = ? AND (owner_id IS NULL OR owner_id = ?) LIMIT 1", (clean_ip, owner_id))
+    row = cursor.fetchone()
+    conn.close()
+    return row is not None
+
+def consume_captcha(sig: str, expires_at: float) -> bool:
+    """Marks a captcha token as used. Returns False when it was already used (replay)."""
+    if not sig:
+        return False
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM used_captchas WHERE expires_at < ?", (time.time(),))
+    cursor.execute("INSERT OR IGNORE INTO used_captchas (sig, expires_at) VALUES (?, ?)", (sig, expires_at))
+    first_use = cursor.rowcount == 1
+    conn.commit()
+    conn.close()
+    return first_use
 
 
 # -------------------------------------------------------------
@@ -463,13 +589,20 @@ def record_audit_log(
     conn.close()
     return log_id
 
-def list_audit_logs(limit: int = 50, action: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_audit_logs(limit: int = 50, action: Optional[str] = None, actor: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Newest first. `actor` restricts rows to one operator's own events (non-admin view)."""
+    limit = max(1, min(int(limit), 500))
+    where, params = [], []
+    if action:
+        where.append("action = ?")
+        params.append(action)
+    if actor is not None:
+        where.append("LOWER(actor) = LOWER(?)")
+        params.append(actor)
+    clause = ("WHERE " + " AND ".join(where)) if where else ""
     conn = get_db_connection()
     cursor = conn.cursor()
-    if action:
-        cursor.execute("SELECT * FROM audit_logs WHERE action = ? ORDER BY id DESC LIMIT ?", (action, limit))
-    else:
-        cursor.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?", (limit,))
+    cursor.execute(f"SELECT * FROM audit_logs {clause} ORDER BY id DESC LIMIT ?", (*params, limit))
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]

@@ -1,4 +1,5 @@
 import os
+import secrets
 from typing import Optional, List
 from pathlib import Path
 from dotenv import load_dotenv
@@ -25,19 +26,31 @@ def _get_base_url() -> str:
         return f"https://{vercel_url}".rstrip("/")
     return "http://localhost:8000"
 
+def _get_secret_key() -> tuple:
+    """Returns (key, configured). Without HONEYGRID_SECRET_KEY a per-process random key is used,
+    which is safe locally but cannot validate captchas across serverless instances."""
+    val = os.getenv("HONEYGRID_SECRET_KEY", "").strip()
+    if val:
+        return val, True
+    return secrets.token_hex(32), False
+
+_SECRET_KEY, _SECRET_KEY_CONFIGURED = _get_secret_key()
+
 class Settings:
+    IS_PRODUCTION: bool = bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("HONEYGRID_PRODUCTION"))
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
-    DISCORD_SIGNUP_WEBHOOK_URL: str = os.getenv(
-        "DISCORD_SIGNUP_WEBHOOK_URL",
-        "https://discord.com/api/webhooks/1552057119237349416/H66zNAhya40X9FeSr7AGiBVBSQ5f068stDNf8QqbCJh0anOlLU4eCHTSkY8fAr2CYt9h"
-    ).strip()
+    DISCORD_SIGNUP_WEBHOOK_URL: str = os.getenv("DISCORD_SIGNUP_WEBHOOK_URL", "").strip()
     HONEYGRID_HOST: str = os.getenv("HONEYGRID_HOST", "0.0.0.0").strip() or "0.0.0.0"
     HONEYGRID_PORT: int = _get_int("HONEYGRID_PORT", 8000)
     HONEYGRID_BASE_URL: str = _get_base_url()
     HONEYGRID_DB_PATH: str = os.getenv("HONEYGRID_DB_PATH", str(BASE_DIR / "honeygrid.db")).strip() or str(BASE_DIR / "honeygrid.db")
     ENABLE_GEOIP_LOOKUP: bool = os.getenv("ENABLE_GEOIP_LOOKUP", "true").strip().lower() in ("true", "1", "yes")
-    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "zine.mhidra@gmail.com").strip().lower()
-    HONEYGRID_SECRET_KEY: str = os.getenv("HONEYGRID_SECRET_KEY", "hg-sentinel-master-secret-key-392810").strip()
+    # The admin account is seeded from these on startup; it can never be claimed by registering.
+    # ADMIN_PASSWORD_HASH comes from `python cli.py hash-password`.
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    ADMIN_PASSWORD_HASH: str = os.getenv("ADMIN_PASSWORD_HASH", "").strip()
+    HONEYGRID_SECRET_KEY: str = _SECRET_KEY
+    SECRET_KEY_CONFIGURED: bool = _SECRET_KEY_CONFIGURED
     SESSION_COOKIE_NAME: str = "honeygrid_session"
     SESSION_EXPIRE_HOURS: int = _get_int("SESSION_EXPIRE_HOURS", 168)  # 7 days
     DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL", "").strip() or None

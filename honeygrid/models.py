@@ -10,7 +10,7 @@ class User(BaseModel):
 
     @property
     def is_admin(self) -> bool:
-        return self.role == "admin" or self.email.lower() == "zine.mhidra@gmail.com"
+        return self.role == "admin"
 
 class UserRegister(BaseModel):
     email: str
@@ -25,7 +25,7 @@ class UserLogin(BaseModel):
     captcha_answer: Optional[str] = None
     captcha_token: Optional[str] = None
     hp_decoy_field: Optional[str] = None
-    remember_me: Optional[bool] = True
+    remember_me: Optional[bool] = False
 
 class TokenCreate(BaseModel):
     token_type: str = Field(..., description="Type of token: web, aws_key, db_conn, env_file, canary_pdf, honeyfile")

@@ -245,6 +245,21 @@ def cmd_unblock_ip(args):
     else:
         console.print(f"[red]Failed to remove rule: {res['message']}[/red]")
 
+def cmd_hash_password():
+    """Prints an ADMIN_PASSWORD_HASH value for seeding the admin account from the environment."""
+    import getpass
+    from honeygrid.core.auth import encode_password_hash
+    password = getpass.getpass("Admin password (12+ characters): ")
+    if len(password) < 12:
+        console.print("[red]Password must be at least 12 characters.[/red]")
+        sys.exit(1)
+    if getpass.getpass("Repeat password: ") != password:
+        console.print("[red]Passwords did not match.[/red]")
+        sys.exit(1)
+    console.print("Set these environment variables (e.g. in Vercel project settings):")
+    print("ADMIN_EMAIL=<your admin email>")
+    print(f"ADMIN_PASSWORD_HASH={encode_password_hash(password)}")
+
 def cmd_test_alert():
     """Test sending an alert directly to Discord to verify webhook integration."""
     init_db()
@@ -375,6 +390,9 @@ def main():
     unblock_parser = subparsers.add_parser("unblock-ip", help="Remove an IP firewall block rule")
     unblock_parser.add_argument("--ip", type=str, required=True, help="Attacker IP to unblock")
 
+    # hash-password
+    subparsers.add_parser("hash-password", help="Generate ADMIN_PASSWORD_HASH for seeding the admin account")
+
     # test-alert
     subparsers.add_parser("test-alert", help="Send a test verification alert to Discord")
 
@@ -398,6 +416,8 @@ def main():
         cmd_isolate_ip(args)
     elif args.command == "unblock-ip":
         cmd_unblock_ip(args)
+    elif args.command == "hash-password":
+        cmd_hash_password()
     elif args.command == "test-alert":
         cmd_test_alert()
     elif args.command == "listen":

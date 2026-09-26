@@ -130,7 +130,7 @@
                     <div class="field">
                         <div class="row">
                             <label class="label" for="auth-password">Password</label>
-                            <span id="pwd-hint" class="hint">At least 6 characters</span>
+                            <span id="pwd-hint" class="hint hidden">12 to 256 characters</span>
                         </div>
                         <div class="pw">
                             <input id="auth-password" name="password" type="password" autocomplete="current-password" required placeholder="Your password" class="input" />
@@ -154,7 +154,7 @@
                         <input id="captcha-input" name="captcha_answer" type="text" required maxlength="5" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Type the 5 characters" class="input" />
                     </div>
 
-                    <label class="check"><input type="checkbox" id="remember-me" checked /> Keep me signed in for 7 days</label>
+                    <label class="check"><input type="checkbox" id="remember-me" /> Keep me signed in for 7 days</label>
 
                     <p id="register-terms" class="hidden">A new account gets its own workspace: only you see your decoys and the incidents they catch.</p>
 
@@ -217,6 +217,7 @@
             btnRegister.setAttribute('aria-selected', String(!isLogin));
             btnText.innerText = isLogin ? 'Sign in' : 'Create operator account';
             regTerms.classList.toggle('hidden', isLogin);
+            document.getElementById('pwd-hint').classList.toggle('hidden', isLogin);
             if (pwdInput) pwdInput.autocomplete = isLogin ? 'current-password' : 'new-password';
         }
 
@@ -259,8 +260,8 @@
                 showAlert('Enter your email and password.');
                 return;
             }
-            if (password.length < 6) {
-                showAlert('Passwords are at least 6 characters.');
+            if (currentAuthMode === 'register' && (password.length < 12 || password.length > 256)) {
+                showAlert('Choose a password between 12 and 256 characters.');
                 return;
             }
             if (!captchaAnswer) {
