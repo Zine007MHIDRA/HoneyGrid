@@ -230,6 +230,67 @@ class TestBruteForce(SecurityTestCase):
         self.assertEqual(self._login(self.password).status_code, 200)
 
 
+class TestPasswordReset(SecurityTestCase):
+    def _login(self, client, email, password):
+        code, token = _captcha()
+        return client.post("/api/auth/login", json={
+            "email": email, "password": password, "captcha_answer": code, "captcha_token": token
+        })
+
+    def test_admin_reset_flow_forces_a_new_password(self):
+        admin = _user(role="admin")
+        operator = _user(password="original password 123")
+        account_limiter.record_success(operator.email)
+        old_session = _client(operator)
+        self.assertEqual(old_session.get("/api/auth/me").status_code, 200)
+
+        res = _client(admin).post(f"/api/admin/users/{operator.id}/reset-password")
+        self.assertEqual(res.status_code, 200)
+        temporary = res.json()["temporary_password"]
+        self.assertGreaterEqual(len(temporary), 16)
+        self.assertEqual(old_session.get("/api/auth/me").status_code, 401, "reset must sign the operator out everywhere")
+        self.assertEqual(self._login(TestClient(app), operator.email, "original password 123").status_code, 401)
+
+        client = TestClient(app)
+        login = self._login(client, operator.email, temporary)
+        self.assertEqual(login.status_code, 200)
+        self.assertTrue(login.json()["must_change_password"])
+        self.assertTrue(client.get("/api/auth/me").json()["must_change_password"])
+        blocked = client.get("/api/stats")
+        self.assertEqual(blocked.status_code, 403)
+        self.assertEqual(blocked.json()["error"], "password_change_required")
+
+        self.assertEqual(client.post("/api/auth/change-password", json={"current_password": temporary, "new_password": "short"}).status_code, 400)
+        changed = client.post("/api/auth/change-password", json={"current_password": temporary, "new_password": "my brand new password"})
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(client.get("/api/stats").status_code, 200, "the session that changed the password keeps working")
+        self.assertEqual(self._login(TestClient(app), operator.email, temporary).status_code, 401, "the temporary password stops working")
+
+    def test_only_admins_can_manage_operators(self):
+        operator, other = _user(), _user()
+        client = _client(operator)
+        self.assertEqual(client.get("/api/admin/users").status_code, 403)
+        self.assertEqual(client.post(f"/api/admin/users/{other.id}/reset-password").status_code, 403)
+
+        admin_client = _client(_user(role="admin"))
+        listing = admin_client.get("/api/admin/users").json()["users"]
+        self.assertTrue(any(u["id"] == operator.id for u in listing))
+        self.assertTrue(all("password_hash" not in u and "salt" not in u for u in listing))
+
+    def test_admin_accounts_are_not_reset_here(self):
+        admin, other_admin = _user(role="admin"), _user(role="admin")
+        client = _client(admin)
+        self.assertEqual(client.post(f"/api/admin/users/{other_admin.id}/reset-password").status_code, 400)
+        self.assertEqual(client.post(f"/api/admin/users/{admin.id}/reset-password").status_code, 400)
+        self.assertEqual(client.post("/api/admin/users/usr_missing/reset-password").status_code, 404)
+
+    def test_change_password_requires_the_current_one(self):
+        operator = _user(password="current password 42")
+        account_limiter.record_success(operator.email)
+        res = _client(operator).post("/api/auth/change-password", json={"current_password": "wrong guess here", "new_password": "a whole new password"})
+        self.assertEqual(res.status_code, 400)
+
+
 class TestHeadersAndSecrets(SecurityTestCase):
     def test_sensitive_responses_are_not_cached_or_indexed(self):
         self.assertEqual(TestClient(app).get("/api/auth/me").headers.get("cache-control"), "no-store")

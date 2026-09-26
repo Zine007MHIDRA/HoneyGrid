@@ -4,6 +4,7 @@ import html
 import base64
 import json
 import time
+import secrets
 from pathlib import Path
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, Request, Response, BackgroundTasks
@@ -18,7 +19,8 @@ from honeygrid.database import (
     create_user, get_user_by_email, get_user_auth_record_by_email, get_user_by_id,
     create_session, get_user_by_session, delete_session,
     add_safe_ip, remove_safe_ip, list_safe_ips, is_safe_ip, is_safe_ip_for_owner,
-    list_audit_logs, consume_captcha
+    list_audit_logs, consume_captcha,
+    delete_user_sessions, get_user_auth_record_by_id, set_user_password, list_users
 )
 from honeygrid.models import IncidentEvent, Token, BrowserTelemetry, User, UserRegister, UserLogin
 from honeygrid.core.auth import hash_password, verify_password, generate_captcha, verify_captcha, burn_password_check, captcha_signature
@@ -62,7 +64,31 @@ def is_https_request(request: Request) -> bool:
         return proto == "https" or ssl == "on"
     return False
 
-NO_STORE_PREFIXES = ("/api/auth", "/api/stats", "/api/incidents", "/api/tokens", "/api/safelist", "/api/audit-logs", "/api/contain")
+NO_STORE_PREFIXES = ("/api/auth", "/api/admin", "/api/stats", "/api/incidents", "/api/tokens", "/api/safelist", "/api/audit-logs", "/api/contain")
+
+# While an operator is on a temporary password (after an admin reset), these are the only API calls allowed
+PASSWORD_CHANGE_ALLOWED = ("/api/auth/me", "/api/auth/change-password", "/api/auth/logout", "/api/auth/captcha", "/api/auth/login")
+
+def session_token_from(request: Request) -> Optional[str]:
+    token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+    return token or None
+
+@app.middleware("http")
+async def require_password_change_middleware(request: Request, call_next):
+    path = request.scope.get("path", "")
+    if path.startswith("/api/") and not path.startswith("/api/v1/auth") and path not in PASSWORD_CHANGE_ALLOWED:
+        token = session_token_from(request)
+        if token:
+            user = get_user_by_session(token)
+            record = get_user_auth_record_by_id(user.id) if user else None
+            if record and record.get("must_change_password"):
+                return JSONResponse({"error": "password_change_required",
+                                     "message": "Choose a new password before continuing."}, status_code=403)
+    return await call_next(request)
 
 @app.middleware("http")
 async def enterprise_security_headers_middleware(request: Request, call_next):
@@ -490,6 +516,7 @@ async def api_login(data: UserLogin, request: Request):
         "status": "success",
         "message": "Identity authenticated",
         "user": user.model_dump(),
+        "must_change_password": bool(record.get("must_change_password")),
         "redirect": "/dashboard"
     })
     set_session_cookie(resp, request, session_token, expire_hours)
@@ -515,7 +542,89 @@ async def api_me(request: Request):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"authenticated": False, "user": None}, status_code=401)
-    return {"authenticated": True, "user": user.model_dump(), "is_admin": user.is_admin}
+    record = get_user_auth_record_by_id(user.id)
+    return {
+        "authenticated": True,
+        "user": user.model_dump(),
+        "is_admin": user.is_admin,
+        "must_change_password": bool(record and record.get("must_change_password")),
+    }
+
+@app.post("/api/auth/change-password")
+async def api_change_password(request: Request, data: Dict[str, Any]):
+    """Any operator changes their own password; other sessions are signed out."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    client_ip, _ = extract_client_ip(request)
+    locked, remaining = account_limiter.is_locked(user.email)
+    if locked:
+        return too_many(remaining)
+
+    current = str(data.get("current_password") or "")
+    new = str(data.get("new_password") or "")
+    record = get_user_auth_record_by_id(user.id)
+    if not record or not await run_in_threadpool(verify_password, current, record["password_hash"], record["salt"]):
+        account_limiter.record_failure(user.email)
+        log_audit_event("PASSWORD_CHANGE_FAILURE", "FAILURE", actor=user.email, client_ip=client_ip, metadata={"reason": "wrong_current_password"})
+        return JSONResponse({"status": "error", "message": "Your current password is incorrect."}, status_code=400)
+    if len(new) < 12 or len(new) > 256:
+        return JSONResponse({"status": "error", "message": "Passwords must be 12 to 256 characters long."}, status_code=400)
+    if new == current:
+        return JSONResponse({"status": "error", "message": "Choose a password different from the current one."}, status_code=400)
+    if user.is_admin and settings.ADMIN_PASSWORD_HASH and user.email == settings.ADMIN_EMAIL:
+        return JSONResponse({"status": "error", "message": "The admin password is managed by ADMIN_PASSWORD_HASH. Generate a new one with `python cli.py hash-password`."}, status_code=400)
+
+    pw_hash, salt = await run_in_threadpool(hash_password, new)
+    set_user_password(user.id, pw_hash, salt, must_change=False)
+    signed_out = delete_user_sessions(user.id, keep_token=session_token_from(request))
+    account_limiter.record_success(user.email)
+    log_audit_event("PASSWORD_CHANGED", "SUCCESS", actor=user.email, client_ip=client_ip, target=user.id, metadata={"other_sessions_ended": signed_out})
+    return {"status": "success", "message": "Password changed. Other sessions were signed out."}
+
+# -------------------------------------------------------------
+# Admin: operator management
+# -------------------------------------------------------------
+
+@app.get("/api/admin/users")
+async def api_admin_list_users(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not user.is_admin:
+        return JSONResponse({"error": "Forbidden"}, status_code=403)
+    return {"status": "success", "users": list_users()}
+
+@app.post("/api/admin/users/{user_id}/reset-password")
+async def api_admin_reset_password(user_id: str, request: Request):
+    """Issues a one-time temporary password. The operator is signed out everywhere and must choose
+    a new password at their next sign-in. The temporary password is returned once and never stored."""
+    admin = get_current_user(request)
+    if not admin:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not admin.is_admin:
+        return JSONResponse({"error": "Forbidden"}, status_code=403)
+    client_ip, _ = extract_client_ip(request)
+
+    target = get_user_auth_record_by_id(user_id)
+    if not target:
+        return JSONResponse({"status": "error", "message": "Operator not found."}, status_code=404)
+    if target["id"] == admin.id or target["role"] == "admin":
+        return JSONResponse({"status": "error", "message": "Admin passwords can't be reset here. Use ADMIN_PASSWORD_HASH for the admin account."}, status_code=400)
+
+    temporary = "-".join(secrets.token_urlsafe(6) for _ in range(3))
+    pw_hash, salt = await run_in_threadpool(hash_password, temporary)
+    set_user_password(target["id"], pw_hash, salt, must_change=True)
+    signed_out = delete_user_sessions(target["id"])
+    account_limiter.record_success(target["email"])
+    log_audit_event("ADMIN_PASSWORD_RESET", "SUCCESS", actor=admin.email, client_ip=client_ip, target=target["email"],
+                    metadata={"sessions_ended": signed_out})
+    return {
+        "status": "success",
+        "email": target["email"],
+        "temporary_password": temporary,
+        "message": f"Temporary password issued for {target['email']}. They must choose a new one when they sign in."
+    }
 
 # -------------------------------------------------------------
 # REST API Endpoints for SOC Dashboard (Multi-Tenant Scoped)

@@ -163,6 +163,11 @@ def init_db():
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)")
     
+    # Migration helper for users: forced password change after an admin reset
+    cursor.execute("PRAGMA table_info(users)")
+    if "must_change_password" not in {row["name"] for row in cursor.fetchall()}:
+        cursor.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+
     # Migration helper for tokens: ensure owner_id and owner_email exist
     cursor.execute("PRAGMA table_info(tokens)")
     existing_token_cols = {row["name"] for row in cursor.fetchall()}
@@ -279,7 +284,7 @@ def seed_admin_from_env():
     cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (email,))
     row = cursor.fetchone()
     if row:
-        cursor.execute("UPDATE users SET password_hash = ?, salt = ?, role = 'admin' WHERE id = ?", (pw_hash, salt, row["id"]))
+        cursor.execute("UPDATE users SET password_hash = ?, salt = ?, role = 'admin', must_change_password = 0 WHERE id = ?", (pw_hash, salt, row["id"]))
     else:
         cursor.execute(
             "INSERT INTO users (id, email, password_hash, salt, role, created_at) VALUES (?, ?, ?, ?, 'admin', ?)",
@@ -318,7 +323,7 @@ def get_user_by_email(email: str) -> Optional[User]:
 def get_user_auth_record_by_email(email: str) -> Optional[Dict[str, Any]]:
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, email, password_hash, salt, role, created_at FROM users WHERE LOWER(email) = LOWER(?)", (email.strip(),))
+    cursor.execute("SELECT id, email, password_hash, salt, role, created_at, must_change_password FROM users WHERE LOWER(email) = LOWER(?)", (email.strip(),))
     row = cursor.fetchone()
     conn.close()
     if not row:
@@ -379,6 +384,51 @@ def delete_session(session_token: str):
     cursor.execute("DELETE FROM sessions WHERE session_token = ?", (session_token,))
     conn.commit()
     conn.close()
+
+def delete_user_sessions(user_id: str, keep_token: Optional[str] = None) -> int:
+    """Signs a user out everywhere, optionally keeping the session making the request."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if keep_token:
+        cursor.execute("DELETE FROM sessions WHERE user_id = ? AND session_token != ?", (user_id, keep_token))
+    else:
+        cursor.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    removed = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return removed
+
+def get_user_auth_record_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, password_hash, salt, role, created_at, must_change_password FROM users WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def set_user_password(user_id: str, password_hash: str, salt: str, must_change: bool = False):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET password_hash = ?, salt = ?, must_change_password = ? WHERE id = ?",
+        (password_hash, salt, 1 if must_change else 0, user_id)
+    )
+    conn.commit()
+    conn.close()
+
+def list_users() -> List[Dict[str, Any]]:
+    """Operator directory for the admin panel (no credential fields)."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.id, u.email, u.role, u.created_at, u.must_change_password,
+               (SELECT COUNT(*) FROM tokens t WHERE t.owner_id = u.id) AS token_count,
+               (SELECT MAX(s.created_at) FROM sessions s WHERE s.user_id = u.id) AS last_session
+        FROM users u ORDER BY u.created_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 # -------------------------------------------------------------

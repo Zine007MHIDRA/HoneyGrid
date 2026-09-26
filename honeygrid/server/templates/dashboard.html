@@ -151,6 +151,12 @@
         .dlg-body { padding: var(--space-5); display: grid; gap: var(--space-4); }
         .dlg-foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding: var(--space-4) var(--space-5); border-top: 1px solid var(--rule); }
         dialog.modal { width: min(520px, calc(100vw - 32px)); }
+        dialog.modal.wide { width: min(760px, calc(100vw - 32px)); }
+        .field-error { color: var(--line-red); font-size: var(--text-sm); font-weight: 600; }
+        .temp-pass { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-2); }
+        .temp-pass code { flex: 1; font-size: var(--text-md); font-weight: 600; padding: 8px 10px; background: var(--surface); border: 1px solid var(--rule-strong); word-break: break-all; }
+        .role-tag { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+        .role-tag.admin { color: var(--ink); }
         dialog[open].modal { animation: rise var(--dur-med) var(--ease-out); }
         @keyframes rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 
@@ -310,6 +316,8 @@
             <symbol id="i-trap" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 20V9l6-5 6 5v11"/><circle cx="12" cy="13" r="2.5"/></symbol>
             <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/></symbol>
             <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+            <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9"/><path d="M17 6l3 3"/><path d="M15 8l2 2"/></symbol>
+            <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.9-3.5 3.4-5.5 6.5-5.5s5.6 2 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18 14.8c1.9.8 3.1 2.6 3.5 5.2"/></symbol>
             <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></symbol>
         </defs>
     </svg>
@@ -335,6 +343,8 @@
                 <button class="btn icon-btn" type="button" id="user-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Account"><svg class="icon"><use href="#i-user"/></svg></button>
                 <div class="user-menu hidden" id="user-menu" role="menu">
                     <div class="who"><b id="user-email-display">—</b><span id="user-role-badge">Operator</span></div>
+                    <button type="button" role="menuitem" id="operators-menu-btn" class="hidden"><svg class="icon"><use href="#i-users"/></svg>Operators</button>
+                    <button type="button" role="menuitem" id="password-menu-btn"><svg class="icon"><use href="#i-key"/></svg>Change password</button>
                     <button type="button" role="menuitem" id="theme-menu-btn"><svg class="icon"><use href="#i-theme"/></svg>Switch theme</button>
                     <button type="button" role="menuitem" id="logout-btn"><svg class="icon"><use href="#i-logout"/></svg>Sign out</button>
                 </div>
@@ -538,6 +548,54 @@
             <div class="dlg-foot">
                 <button class="btn" type="button" id="deploy-another">Deploy another</button>
                 <button class="btn primary" type="button" data-close>Done</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Change password -->
+    <dialog class="modal" id="password-modal" aria-labelledby="password-title">
+        <div class="dlg-head">
+            <h2 id="password-title">Change password</h2>
+            <button class="btn sm" type="button" data-close id="password-close" aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+        </div>
+        <form id="password-form" novalidate>
+            <div class="dlg-body">
+                <p class="note hidden" id="password-forced">An administrator reset your password. Choose a new one to continue.</p>
+                <div class="field">
+                    <label class="label" for="pw-current">Current password</label>
+                    <input class="input" id="pw-current" type="password" autocomplete="current-password" required />
+                </div>
+                <div class="field">
+                    <label class="label" for="pw-new">New password (12 to 256 characters)</label>
+                    <input class="input" id="pw-new" type="password" autocomplete="new-password" minlength="12" maxlength="256" required />
+                </div>
+                <div class="field">
+                    <label class="label" for="pw-confirm">Repeat new password</label>
+                    <input class="input" id="pw-confirm" type="password" autocomplete="new-password" required />
+                </div>
+                <p class="field-error hidden" id="pw-error" role="alert"></p>
+            </div>
+            <div class="dlg-foot">
+                <button class="btn" type="button" data-close id="password-cancel">Cancel</button>
+                <button class="btn primary" type="submit" id="password-submit">Change password</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Operators (admin) -->
+    <dialog class="modal wide" id="operators-modal" aria-labelledby="operators-title">
+        <div class="dlg-head">
+            <h2 id="operators-title">Operators</h2>
+            <button class="btn sm" type="button" data-close aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="dlg-body">
+            <p style="color:var(--muted)">Resetting a password signs the operator out everywhere and issues a temporary password. Until they choose a new one, it only lets them reach the change-password screen.</p>
+            <div class="note hidden" id="reset-result" role="status"></div>
+            <div style="overflow-x:auto">
+                <table class="list">
+                    <thead><tr><th>Operator</th><th>Role</th><th class="num">Decoys</th><th>Joined</th><th></th></tr></thead>
+                    <tbody id="operators-body"><tr><td colspan="5" style="color:var(--muted)">Loading operators…</td></tr></tbody>
+                </table>
             </div>
         </div>
     </dialog>
@@ -1342,6 +1400,7 @@ ${(stats.top_countries || []).length ? stats.top_countries.map((c) => '  ' + c.c
             { label: 'Go to traps', meta: 'View', run: () => showView('traps') },
             { label: 'Go to report', meta: 'View', run: () => showView('report') },
             { label: 'Switch theme', meta: 'Display', run: () => toggleTheme() },
+            { label: 'Change password', meta: 'Account', run: () => openPasswordDialog(false) },
             { label: 'Sign out', meta: 'Account', run: () => logoutUser() }
         ];
         let paletteItems = [];
@@ -1431,12 +1490,120 @@ ${(stats.top_countries || []).length ? stats.top_countries.map((c) => '  ' + c.c
                 if (currentUser.role === 'admin' || data.is_admin) {
                     $('user-role-badge').innerText = 'Administrator';
                     $('tenant-scope-text').innerText = 'All workspaces';
+                    $('operators-menu-btn').classList.remove('hidden');
+                }
+                if (data.must_change_password) {
+                    await requirePasswordChange();
                 }
                 return true;
             } catch (e) {
                 console.error("Auth check failed:", e);
                 window.location.href = '/login';
                 return false;
+            }
+        }
+
+        /* ================= Passwords & operators ================= */
+        let passwordForced = false;
+
+        function openPasswordDialog(forced) {
+            passwordForced = !!forced;
+            $('password-form').reset();
+            $('pw-error').classList.add('hidden');
+            $('password-forced').classList.toggle('hidden', !passwordForced);
+            $('password-close').classList.toggle('hidden', passwordForced);
+            $('password-cancel').classList.toggle('hidden', passwordForced);
+            if (!$('password-modal').open) $('password-modal').showModal();
+            $('pw-current').focus();
+        }
+
+        // Resolves once the operator has replaced their temporary password
+        function requirePasswordChange() {
+            return new Promise((resolve) => {
+                passwordChangedResolve = resolve;
+                openPasswordDialog(true);
+            });
+        }
+        let passwordChangedResolve = null;
+
+        async function submitPasswordChange(e) {
+            e.preventDefault();
+            const err = $('pw-error');
+            const show = (msg) => { err.innerText = msg; err.classList.remove('hidden'); };
+            err.classList.add('hidden');
+            const current = $('pw-current').value;
+            const next = $('pw-new').value;
+            if (next.length < 12 || next.length > 256) return show('Choose a new password between 12 and 256 characters.');
+            if (next !== $('pw-confirm').value) return show('The new passwords do not match.');
+            const btn = $('password-submit');
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ current_password: current, new_password: next })
+                });
+                const data = await res.json();
+                if (!res.ok) return show(data.message || 'Could not change the password.');
+                passwordForced = false;
+                $('password-modal').close();
+                toast(data.message || 'Password changed.', 'ok');
+                if (passwordChangedResolve) { const r = passwordChangedResolve; passwordChangedResolve = null; r(); }
+            } catch (ex) {
+                show('Could not reach the server. Try again.');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function openOperators() {
+            $('reset-result').classList.add('hidden');
+            if (!$('operators-modal').open) $('operators-modal').showModal();
+            await loadOperators();
+        }
+
+        async function loadOperators() {
+            const body = $('operators-body');
+            try {
+                const res = await fetch('/api/admin/users');
+                if (!res.ok) { body.innerHTML = '<tr><td colspan="5">Only administrators can manage operators.</td></tr>'; return; }
+                const data = await res.json();
+                body.innerHTML = data.users.map((u) => {
+                    const isAdmin = u.role === 'admin';
+                    const self = currentUser && u.id === currentUser.id;
+                    const pending = u.must_change_password ? '<div style="color:var(--muted);font-size:var(--text-xs)">Temporary password issued</div>' : '';
+                    const action = (isAdmin || self)
+                        ? '<span style="color:var(--faint);font-size:var(--text-xs)">Managed by environment</span>'
+                        : `<button class="btn sm" type="button" data-reset-user="${escapeHtml(u.id)}" data-reset-email="${escapeHtml(u.email)}"><svg class="icon"><use href="#i-key"/></svg>Reset password</button>`;
+                    return `<tr>
+                        <td><b>${escapeHtml(u.email)}</b>${pending}</td>
+                        <td><span class="role-tag${isAdmin ? ' admin' : ''}">${isAdmin ? 'Admin' : 'Operator'}</span></td>
+                        <td class="num">${escapeHtml(u.token_count)}</td>
+                        <td style="font-size:var(--text-xs);color:var(--muted)">${escapeHtml((u.created_at || '').substring(0, 10))}</td>
+                        <td><div class="t-actions">${action}</div></td>
+                    </tr>`;
+                }).join('') || '<tr><td colspan="5">No operators yet.</td></tr>';
+            } catch (e) {
+                body.innerHTML = '<tr><td colspan="5">Could not load operators.</td></tr>';
+            }
+        }
+
+        async function resetOperatorPassword(userId, email) {
+            const ok = await confirmAction('Reset password', `Reset the password for ${email}? They will be signed out everywhere and must choose a new password with the temporary one you give them.`, 'Reset password');
+            if (!ok) return;
+            const box = $('reset-result');
+            try {
+                const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) { toast(data.message || 'Reset failed.', 'error'); return; }
+                box.innerHTML = `<b>Temporary password for ${escapeHtml(data.email)}</b>
+                    <div class="temp-pass"><code id="temp-pass-value">${escapeHtml(data.temporary_password)}</code><button class="btn sm" type="button" id="copy-temp-pass">Copy</button></div>
+                    <div style="margin-top:var(--space-2);font-size:var(--text-xs);color:var(--muted)">Shown once. Share it privately; it stops working as soon as they choose a new password.</div>`;
+                box.classList.remove('hidden');
+                $('copy-temp-pass').addEventListener('click', () => copyToClipboard(data.temporary_password, 'Temporary password copied'));
+                loadOperators();
+            } catch (e) {
+                toast('Could not reach the server to reset the password.', 'error');
             }
         }
 
@@ -1460,6 +1627,7 @@ ${(stats.top_countries || []).length ? stats.top_countries.map((c) => '  ' + c.c
             if (t.dataset.isolate) { e.stopPropagation(); isolateIP(t.dataset.isolate); return; }
             if (t.dataset.safelist) { addIpToSafeList(t.dataset.safelist, 'Safelisted from incident drawer'); return; }
             if (t.dataset.removeSafe) { removeSafeIp(t.dataset.removeSafe); return; }
+            if (t.dataset.resetUser) { resetOperatorPassword(t.dataset.resetUser, t.dataset.resetEmail); return; }
             if (t.dataset.copy) { copyToClipboard(t.dataset.copy, t.dataset.copyLabel || 'Copied'); return; }
             if (t.dataset.locate) {
                 e.stopPropagation();
@@ -1530,6 +1698,13 @@ ${(stats.top_countries || []).length ? stats.top_countries.map((c) => '  ' + c.c
         $('deploy-btn').addEventListener('click', () => openModal('token-modal'));
         $('sim-btn').addEventListener('click', simulateIntrusionBeacon);
         $('logout-btn').addEventListener('click', logoutUser);
+        $('password-menu-btn').addEventListener('click', () => { $('user-menu').classList.add('hidden'); openPasswordDialog(false); });
+        $('operators-menu-btn').addEventListener('click', () => { $('user-menu').classList.add('hidden'); openOperators(); });
+        $('password-form').addEventListener('submit', submitPasswordChange);
+        // A required change can't be dismissed with Escape or the backdrop
+        $('password-modal').addEventListener('cancel', (e) => { if (passwordForced) e.preventDefault(); });
+        $('password-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget && !passwordForced) e.currentTarget.close(); });
+        $('operators-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
         $('add-current-ip').addEventListener('click', addCurrentIpToSafeList);
         $('add-safe-ip').addEventListener('click', addNewSafeIp);
         $('new-safe-ip').addEventListener('keydown', (e) => { if (e.key === 'Enter') addNewSafeIp(); });
