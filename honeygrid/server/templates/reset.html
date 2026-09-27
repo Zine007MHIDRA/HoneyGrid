@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Reset password · HoneyGrid Sentinel</title>
+    <link rel="icon" href="/api/logo" />
+    <script>try { var t = localStorage.getItem('hg-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/ui/theme.css" />
+    <style>
+        body { min-height: 100vh; display: flex; flex-direction: column; }
+        .band .spacer { flex: 1; }
+        .band a.back { color: var(--band-muted); text-decoration: none; font-size: var(--text-sm); font-weight: 500; white-space: nowrap; }
+        .band a.back:hover { color: var(--band-ink); }
+        main { flex: 1; display: grid; place-items: center; padding: var(--space-8) var(--space-5); }
+        .panel { width: min(440px, 100%); background: var(--surface); border: var(--rule-w) solid var(--rule); box-shadow: var(--shadow); }
+        .panel-head { background: var(--band); color: var(--band-ink); padding: var(--space-4) var(--space-5); }
+        .panel-head h1 { font-size: var(--text-lg); font-weight: 800; letter-spacing: -0.01em; }
+        .panel-body { padding: var(--space-5); display: grid; gap: var(--space-4); }
+        .lead { color: var(--muted); font-size: var(--text-sm); }
+        form { display: grid; gap: var(--space-4); }
+        .hidden { display: none !important; }
+        .alert, .notice { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); font-size: var(--text-sm); }
+        .alert { border: var(--rule-w) solid var(--line-red); background: color-mix(in srgb, var(--line-red) 10%, var(--surface)); }
+        .notice { border: var(--rule-w) solid var(--line-green); background: color-mix(in srgb, var(--line-green) 10%, var(--surface)); }
+        .alert .bullet, .notice .bullet { --b: 22px; }
+        #submit-btn, .wide { height: 44px; width: 100%; font-size: var(--text-base); }
+        .spin { animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 600px) { main { padding: var(--space-6) var(--space-4); } .band-inner { padding-left: var(--space-4); padding-right: var(--space-4); } }
+    </style>
+</head>
+<body>
+    <header class="band">
+        <div class="band-inner">
+            <a class="wordmark" href="/" aria-label="HoneyGrid Sentinel home">
+                <img src="/api/logo" alt="" />
+                <b>HoneyGrid</b><span>Sentinel</span>
+            </a>
+            <div class="spacer"></div>
+            <a class="back" href="/login">Sign in</a>
+        </div>
+    </header>
+
+    <main>
+        <section class="panel" aria-labelledby="reset-title">
+            <div class="panel-head"><h1 id="reset-title">Choose a new password</h1></div>
+            <div class="panel-body">
+                <div id="alert" class="alert hidden" role="alert">
+                    <span class="bullet red" aria-hidden="true">!</span>
+                    <span id="alert-msg"></span>
+                </div>
+
+                <div id="done" class="hidden">
+                    <div class="notice" role="status">
+                        <span class="bullet green" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" style="stroke-width:2.5"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+                        <span>Password updated. You've been signed out everywhere; sign in with your new password.</span>
+                    </div>
+                    <a class="btn primary wide" href="/login" style="margin-top:var(--space-4)">Go to sign in</a>
+                </div>
+
+                <div id="missing" class="hidden">
+                    <p class="lead">This reset link is incomplete. Open the link from your email again, or request a new one.</p>
+                    <a class="btn wide" href="/login#forgot" style="margin-top:var(--space-4)">Request a new link</a>
+                </div>
+
+                <form id="reset-form" novalidate class="hidden">
+                    <p class="lead">Pick a password you don't use anywhere else. Saving it signs you out of every device.</p>
+                    <div class="field">
+                        <label class="label" for="new-password">New password (12 to 256 characters)</label>
+                        <input class="input" id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required />
+                    </div>
+                    <div class="field">
+                        <label class="label" for="confirm-password">Repeat new password</label>
+                        <input class="input" id="confirm-password" type="password" autocomplete="new-password" required />
+                    </div>
+                    <button id="submit-btn" type="submit" class="btn primary">
+                        <span>Save new password</span>
+                        <svg id="btn-spinner" class="icon spin hidden" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>
+                    </button>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        (function () {
+            // The token arrives in the fragment (#token=...), which is never sent to any server.
+            // Read it once, then remove it from the address bar and history.
+            const params = new URLSearchParams(location.hash.replace(/^#/, ''));
+            const token = params.get('token') || '';
+            if (location.hash) history.replaceState(null, '', location.pathname);
+
+            const $ = (id) => document.getElementById(id);
+            const showAlert = (msg) => { $('alert-msg').innerText = msg; $('alert').classList.remove('hidden'); };
+
+            if (!token) {
+                $('missing').classList.remove('hidden');
+                return;
+            }
+            $('reset-form').classList.remove('hidden');
+            $('new-password').focus();
+
+            $('reset-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                $('alert').classList.add('hidden');
+                const password = $('new-password').value;
+                if (password.length < 12 || password.length > 256) return showAlert('Choose a password between 12 and 256 characters.');
+                if (password !== $('confirm-password').value) return showAlert('The passwords do not match.');
+                $('submit-btn').disabled = true;
+                $('btn-spinner').classList.remove('hidden');
+                try {
+                    const res = await fetch('/api/auth/reset-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: token, new_password: password })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        $('reset-form').classList.add('hidden');
+                        $('done').classList.remove('hidden');
+                    } else {
+                        showAlert(data.message || 'Could not reset the password.');
+                    }
+                } catch (err) {
+                    showAlert('Could not reach the server. Check your connection and try again.');
+                } finally {
+                    $('submit-btn').disabled = false;
+                    $('btn-spinner').classList.add('hidden');
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

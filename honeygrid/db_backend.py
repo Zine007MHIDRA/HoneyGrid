@@ -252,8 +252,22 @@ PG_SCHEMA = [
         payload TEXT NOT NULL,
         created_at TEXT NOT NULL
     )""",
+    """CREATE TABLE IF NOT EXISTS password_resets (
+        token_hash TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0
+    )""",
     """CREATE TABLE IF NOT EXISTS used_captchas (
         sig TEXT PRIMARY KEY,
         expires_at DOUBLE PRECISION NOT NULL
     )""",
 ]
+
+# Supabase publishes every public-schema table through its REST API. Row-level security with no
+# policies closes that door on every table (including ones added later), while HoneyGrid, which
+# connects as the tables' owner, is unaffected. Idempotent, so it runs on every cold start.
+PG_TABLES = ["users", "sessions", "tokens", "incidents", "safe_ips", "login_attempts",
+             "login_lockouts", "audit_logs", "pending_telemetry", "password_resets", "used_captchas"]
+PG_SCHEMA += [f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY" for t in PG_TABLES]

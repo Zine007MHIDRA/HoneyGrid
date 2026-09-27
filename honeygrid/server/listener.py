@@ -20,18 +20,20 @@ from honeygrid.database import (
     create_session, get_user_by_session, delete_session,
     add_safe_ip, remove_safe_ip, list_safe_ips, is_safe_ip, is_safe_ip_for_owner,
     list_audit_logs, consume_captcha,
-    delete_user_sessions, get_user_auth_record_by_id, set_user_password, list_users
+    delete_user_sessions, get_user_auth_record_by_id, set_user_password, list_users,
+    create_password_reset, consume_password_reset
 )
 from urllib.parse import urlsplit
 from honeygrid.models import IncidentEvent, Token, BrowserTelemetry, User, UserRegister, UserLogin
 from honeygrid.core.auth import hash_password, verify_password, generate_captcha, verify_captcha, burn_password_check, captcha_signature, needs_rehash
-from honeygrid.core.rate_limit import login_limiter, account_limiter, register_limiter, captcha_limiter, canary_limiter, telemetry_limiter, alert_limiter
+from honeygrid.core.rate_limit import login_limiter, account_limiter, register_limiter, captcha_limiter, canary_limiter, telemetry_limiter, alert_limiter, reset_ip_limiter, reset_email_limiter
 from honeygrid.core.fingerprint import extract_client_ip, identify_client_tool, ip_in_networks
 from honeygrid.core.redact import redact_headers
 from honeygrid.core.audit import log_audit_event
 from honeygrid.core.geo import lookup_ip_geolocation
 from honeygrid.core.threat_intel import analyze_ip_threat
 from honeygrid.alerts.discord import send_discord_alert, send_discord_signup_alert
+from honeygrid.alerts.email import send_password_reset_email
 from honeygrid.core.containment import block_ip, validate_containment_ip
 from honeygrid.core.generator import (
     create_web_canary_token, create_aws_honeytoken, create_env_honeytoken,
@@ -163,10 +165,12 @@ async def enterprise_security_headers_middleware(request: Request, call_next):
             "object-src 'none';"
         )
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
-        if path.startswith(NO_STORE_PREFIXES) or path in ("/login", "/dashboard"):
+        if path.startswith(NO_STORE_PREFIXES) or path in ("/login", "/dashboard", "/reset-password"):
             response.headers.setdefault("Cache-Control", "no-store")
-        if path in ("/login", "/dashboard"):
+        if path in ("/login", "/dashboard", "/reset-password"):
             response.headers["X-Robots-Tag"] = "noindex, nofollow"
+        if path == "/reset-password":
+            response.headers["Referrer-Policy"] = "no-referrer"
         if is_https_request(request):
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
 
@@ -374,6 +378,14 @@ async def soc_dashboard(request: Request):
     html = render_page("dashboard.html", request)
     if not html:
         return HTMLResponse("<h1>HoneyGrid Dashboard template not found</h1>", status_code=500)
+    return HTMLResponse(html)
+
+@app.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_page(request: Request):
+    """The reset token travels in the URL fragment (#token=...), which browsers never send to servers."""
+    html = render_page("reset.html", request)
+    if not html:
+        return HTMLResponse("<h1>Reset page template not found</h1>", status_code=500)
     return HTMLResponse(html)
 
 @app.get("/health")
@@ -614,6 +626,75 @@ async def api_me(request: Request):
         "is_admin": user.is_admin,
         "must_change_password": bool(record and record.get("must_change_password")),
     }
+
+def forgot_password_response() -> JSONResponse:
+    return JSONResponse({
+        "status": "success",
+        "message": f"If an account uses that email, a reset link is on its way. It expires in {settings.PASSWORD_RESET_MINUTES} minutes."
+    })
+
+@app.post("/api/auth/forgot-password")
+async def api_forgot_password(request: Request, data: Dict[str, Any], background_tasks: BackgroundTasks):
+    """Emails a single-use reset link. The response is identical whether or not the account exists,
+    and the email is sent in the background so timing doesn't reveal it either."""
+    if not auth_configured():
+        return JSONResponse(AUTH_UNAVAILABLE, status_code=503)
+    client_ip, _ = extract_client_ip(request)
+    locked, remaining = reset_ip_limiter.is_locked(client_ip)
+    if locked:
+        return too_many(remaining)
+    reset_ip_limiter.record_failure(client_ip)
+
+    if data.get("hp_decoy_field"):
+        return forgot_password_response()
+    if not check_captcha(data.get("captcha_answer"), data.get("captcha_token")):
+        return JSONResponse({"status": "error", "message": "Security verification code is incorrect or expired. Please reload challenge."}, status_code=400)
+
+    email = str(data.get("email") or "").strip().lower()[:254]
+    if not email or not EMAIL_PATTERN.match(email):
+        return forgot_password_response()
+    # At most 3 emails per address per hour, silently: nobody can use this to flood an inbox
+    if reset_email_limiter.is_locked(email)[0]:
+        return forgot_password_response()
+    reset_email_limiter.record_failure(email)
+
+    record = get_user_auth_record_by_email(email)
+    env_managed_admin = bool(settings.ADMIN_PASSWORD_HASH) and email == settings.ADMIN_EMAIL
+    if record and not env_managed_admin:
+        token = create_password_reset(record["id"], settings.PASSWORD_RESET_MINUTES)
+        link = f"{settings.PUBLIC_URL}/reset-password#token={token}"
+        background_tasks.add_task(send_password_reset_email, record["email"], link, settings.PASSWORD_RESET_MINUTES)
+        log_audit_event("PASSWORD_RESET_REQUESTED", "SUCCESS", actor=record["email"], client_ip=client_ip, target=record["id"])
+    else:
+        log_audit_event("PASSWORD_RESET_REQUESTED", "NO_ELIGIBLE_ACCOUNT", actor=email, client_ip=client_ip)
+    return forgot_password_response()
+
+@app.post("/api/auth/reset-password")
+async def api_reset_password(request: Request, data: Dict[str, Any]):
+    """Completes a reset: the link's token is consumed once, the password replaced, every session ended."""
+    if not auth_configured():
+        return JSONResponse(AUTH_UNAVAILABLE, status_code=503)
+    client_ip, _ = extract_client_ip(request)
+    locked, remaining = login_limiter.is_locked(client_ip)
+    if locked:
+        return too_many(remaining)
+
+    new_password = str(data.get("new_password") or "")
+    if len(new_password) < 12 or len(new_password) > 256:
+        return JSONResponse({"status": "error", "message": "Passwords must be 12 to 256 characters long."}, status_code=400)
+
+    user_id = consume_password_reset(str(data.get("token") or ""))
+    record = get_user_auth_record_by_id(user_id) if user_id else None
+    if not record:
+        login_limiter.record_failure(client_ip)
+        return JSONResponse({"status": "error", "message": "This reset link is invalid, already used, or expired. Request a new one."}, status_code=400)
+
+    pw_hash, salt = await run_in_threadpool(hash_password, new_password)
+    set_user_password(record["id"], pw_hash, salt, must_change=False)
+    ended = delete_user_sessions(record["id"])
+    account_limiter.record_success(record["email"])
+    log_audit_event("PASSWORD_RESET_COMPLETED", "SUCCESS", actor=record["email"], client_ip=client_ip, target=record["id"], metadata={"sessions_ended": ended})
+    return {"status": "success", "message": "Password updated. Sign in with your new password.", "redirect": "/login"}
 
 @app.post("/api/auth/change-password")
 async def api_change_password(request: Request, data: Dict[str, Any]):

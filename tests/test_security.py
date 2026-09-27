@@ -18,7 +18,7 @@ from honeygrid.database import (
 )
 from honeygrid.models import IncidentEvent, Token
 from honeygrid.core.auth import generate_captcha, hash_password, encode_password_hash
-from honeygrid.core.rate_limit import login_limiter, account_limiter, register_limiter, captcha_limiter, canary_limiter, telemetry_limiter
+from honeygrid.core.rate_limit import login_limiter, account_limiter, register_limiter, captcha_limiter, canary_limiter, telemetry_limiter, reset_ip_limiter, reset_email_limiter
 from honeygrid.core import containment
 from honeygrid.server.listener import app
 
@@ -52,7 +52,7 @@ def _captcha():
     return code, token
 
 def _reset_limits():
-    for limiter in (login_limiter, register_limiter, captcha_limiter, canary_limiter, telemetry_limiter):
+    for limiter in (login_limiter, register_limiter, captcha_limiter, canary_limiter, telemetry_limiter, reset_ip_limiter):
         limiter.record_success(LOCAL_IP)
 
 
@@ -400,6 +400,90 @@ class TestRoundTwo(SecurityTestCase):
         self.assertEqual(res.status_code, 200)
         self.assertFalse((Path(__file__).resolve().parent.parent.parent / "escape.pdf").exists())
         self.assertEqual(client.post("/api/tokens/create", json={"token_type": "shell", "label": "x"}).status_code, 400)
+
+
+class TestForgotPassword(SecurityTestCase):
+    def _forgot(self, email):
+        code, token = _captcha()
+        return TestClient(app).post("/api/auth/forgot-password", json={"email": email, "captcha_answer": code, "captcha_token": token})
+
+    def _emailed_token(self, send):
+        link = send.call_args.args[1]
+        self.assertIn("/reset-password#token=", link, "the token travels in the fragment, never the query string")
+        return link.split("#token=", 1)[1]
+
+    def test_reset_flow_end_to_end(self):
+        operator = _user(password="forgotten password 1")
+        reset_email_limiter.record_success(operator.email)
+        old_session = _client(operator)
+        with patch("honeygrid.server.listener.send_password_reset_email") as send:
+            res = self._forgot(operator.email)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(send.call_args.args[0], operator.email)
+        token = self._emailed_token(send)
+
+        page = TestClient(app).get("/reset-password", headers={"accept": "text/html"})
+        self.assertEqual(page.headers.get("referrer-policy"), "no-referrer")
+
+        self.assertEqual(TestClient(app).post("/api/auth/reset-password", json={"token": token, "new_password": "short"}).status_code, 400)
+        done = TestClient(app).post("/api/auth/reset-password", json={"token": token, "new_password": "a fresh new password"})
+        self.assertEqual(done.status_code, 200)
+        self.assertEqual(old_session.get("/api/auth/me").status_code, 401, "a reset signs out every session")
+        again = TestClient(app).post("/api/auth/reset-password", json={"token": token, "new_password": "another new password"})
+        self.assertEqual(again.status_code, 400, "links work once")
+
+        code, cap = _captcha()
+        login = TestClient(app).post("/api/auth/login", json={"email": operator.email, "password": "a fresh new password", "captcha_answer": code, "captcha_token": cap})
+        self.assertEqual(login.status_code, 200)
+
+    def test_response_does_not_reveal_whether_an_account_exists(self):
+        operator = _user()
+        reset_email_limiter.record_success(operator.email)
+        with patch("honeygrid.server.listener.send_password_reset_email") as send:
+            known = self._forgot(operator.email)
+            _reset_limits()
+            unknown = self._forgot(_email("nobody"))
+        self.assertEqual(known.status_code, unknown.status_code)
+        self.assertEqual(known.json(), unknown.json())
+        self.assertEqual(send.call_count, 1, "only the real account gets an email")
+
+    def test_tokens_are_stored_hashed_and_expire(self):
+        from honeygrid.database import create_password_reset, consume_password_reset, get_db_connection
+        operator = _user()
+        token = create_password_reset(operator.id, minutes_valid=30)
+        cursor = get_db_connection().cursor()
+        cursor.execute("SELECT token_hash FROM password_resets WHERE user_id = ?", (operator.id,))
+        stored = [r[0] for r in cursor.fetchall()]
+        self.assertEqual(len(stored), 1)
+        self.assertNotEqual(stored[0], token)
+        expired = create_password_reset(operator.id, minutes_valid=-1)
+        self.assertIsNone(consume_password_reset(expired))
+        self.assertIsNone(consume_password_reset(token), "issuing a new link cancels the previous one")
+
+    def test_inbox_flooding_is_capped(self):
+        operator = _user()
+        reset_email_limiter.record_success(operator.email)
+        with patch("honeygrid.server.listener.send_password_reset_email") as send:
+            for _ in range(5):
+                reset_ip_limiter.record_success(LOCAL_IP)
+                self.assertEqual(self._forgot(operator.email).status_code, 200)
+        self.assertEqual(send.call_count, 3, "at most 3 reset emails per address per hour")
+
+    def test_env_managed_admin_is_not_reset_by_email(self):
+        admin_email = _email("envadmin")
+        create_user(email=admin_email, password_hash="h", salt="s", role="admin")
+        with patch.object(settings, "ADMIN_EMAIL", admin_email), patch.object(settings, "ADMIN_PASSWORD_HASH", "pbkdf2_sha256$x$" + "0" * 64),                 patch("honeygrid.server.listener.send_password_reset_email") as send:
+            self.assertEqual(self._forgot(admin_email).status_code, 200)
+        self.assertFalse(send.called)
+
+    def test_reset_links_use_the_configured_address_not_the_host_header(self):
+        operator = _user()
+        reset_email_limiter.record_success(operator.email)
+        code, token = _captcha()
+        with patch.object(settings, "PUBLIC_URL", "https://honeygrid.example"),                 patch("honeygrid.server.listener.send_password_reset_email") as send:
+            TestClient(app).post("/api/auth/forgot-password", headers={"host": "evil.example"},
+                                 json={"email": operator.email, "captcha_answer": code, "captcha_token": token})
+        self.assertTrue(send.call_args.args[1].startswith("https://honeygrid.example/reset-password#token="))
 
 
 class TestHeadersAndSecrets(SecurityTestCase):

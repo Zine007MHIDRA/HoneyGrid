@@ -26,6 +26,17 @@ def _get_base_url() -> str:
         return f"https://{vercel_url}".rstrip("/")
     return "http://localhost:8000"
 
+def _get_public_url() -> str:
+    """The site's canonical public address, used for links sent by email. It comes only from
+    configuration, never from a request's Host header, so reset links can't be pointed elsewhere."""
+    explicit = os.getenv("HONEYGRID_PUBLIC_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    production_host = os.getenv("VERCEL_PROJECT_PRODUCTION_URL", "").strip()
+    if production_host:
+        return f"https://{production_host}".rstrip("/")
+    return "http://localhost:8000"
+
 def _get_secret_key() -> tuple:
     """Returns (key, configured). Without HONEYGRID_SECRET_KEY a per-process random key is used,
     which is safe locally but cannot validate captchas across serverless instances."""
@@ -59,6 +70,12 @@ class Settings:
     CLOUDFLARE_PROXIES: str = os.getenv("CLOUDFLARE_PROXIES", "").strip()
     ENABLE_CLOUDFLARE_DEFAULT_CIDRS: bool = os.getenv("ENABLE_CLOUDFLARE_DEFAULT_CIDRS", "true").strip().lower() in ("true", "1", "yes")
     GEOIP_API_URL: str = os.getenv("GEOIP_API_URL", "https://freeipapi.com/api/json/{ip}").strip()
+    # Password-reset email (Resend). Without a verified domain, Resend only delivers to the
+    # address that owns the Resend account.
+    PUBLIC_URL: str = _get_public_url()
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "").strip()
+    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "HoneyGrid Sentinel <onboarding@resend.dev>").strip()
+    PASSWORD_RESET_MINUTES: int = _get_int("PASSWORD_RESET_MINUTES", 30)
 
     def get_trusted_proxies(self) -> List[str]:
         if not self.TRUSTED_PROXIES:

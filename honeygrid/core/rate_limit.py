@@ -66,5 +66,8 @@ captcha_limiter = LoginRateLimiter(max_attempts=40, window_seconds=600, lockout_
 canary_limiter = LoginRateLimiter(max_attempts=60, window_seconds=600, lockout_seconds=600, prefix="can:")
 # Per source IP: browser telemetry submissions
 telemetry_limiter = LoginRateLimiter(max_attempts=30, window_seconds=600, lockout_seconds=600, prefix="tel:")
+# Password-reset requests: per client IP, and per target email (stops inbox flooding)
+reset_ip_limiter = LoginRateLimiter(max_attempts=5, window_seconds=3600, lockout_seconds=3600, prefix="rst:")
+reset_email_limiter = LoginRateLimiter(max_attempts=3, window_seconds=3600, lockout_seconds=3600, prefix="rste:")
 # Per attacker+decoy: at most one Discord alert every 5 minutes
 alert_limiter = LoginRateLimiter(max_attempts=1, window_seconds=300, lockout_seconds=300, prefix="alert:")

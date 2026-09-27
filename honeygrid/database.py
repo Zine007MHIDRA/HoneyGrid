@@ -1,5 +1,6 @@
 import os
 import time
+import secrets
 import ipaddress
 import sqlite3
 import json
@@ -235,6 +236,17 @@ def init_db():
     )
     """)
 
+    # Password reset links: only a SHA-256 of each token is stored
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS password_resets (
+        token_hash TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0
+    )
+    """)
+
     # Solved or attempted captcha tokens, so each one works exactly once
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS used_captchas (
@@ -444,6 +456,37 @@ def set_user_password(user_id: str, password_hash: str, salt: str, must_change: 
     )
     conn.commit()
     conn.close()
+
+def create_password_reset(user_id: str, minutes_valid: int) -> str:
+    """Issues a single-use reset token (returned once; only its hash is stored). Any earlier
+    unused links for the same account stop working."""
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM password_resets WHERE user_id = ? OR expires_at < ?", (user_id, now.isoformat()))
+    cursor.execute(
+        "INSERT INTO password_resets (token_hash, user_id, created_at, expires_at, used) VALUES (?, ?, ?, ?, 0)",
+        (hash_session_token(token), user_id, now.isoformat(), (now + timedelta(minutes=minutes_valid)).isoformat())
+    )
+    conn.commit()
+    conn.close()
+    return token
+
+def consume_password_reset(token: str) -> Optional[str]:
+    """Atomically marks a valid, unexpired, unused token as used and returns its user id."""
+    if not token or len(token) > 200:
+        return None
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE password_resets SET used = 1 WHERE token_hash = ? AND used = 0 AND expires_at >= ? RETURNING user_id",
+        (hash_session_token(token), datetime.now(timezone.utc).isoformat())
+    )
+    row = cursor.fetchone()
+    conn.commit()
+    conn.close()
+    return row[0] if row else None
 
 def list_users() -> List[Dict[str, Any]]:
     """Operator directory for the admin panel (no credential fields)."""
