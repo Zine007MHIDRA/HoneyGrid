@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from honeygrid.config import settings
+from honeygrid import db_backend
 from honeygrid.models import Token, IncidentEvent, BrowserTelemetry, User
 from honeygrid.core.auth import generate_session_token, generate_user_id, decode_password_hash, hash_session_token
 from honeygrid.core.redact import redact_headers, headers_need_redaction
@@ -34,7 +35,10 @@ def get_db_path() -> str:
         return "/tmp/honeygrid.db"
 
 
-def get_db_connection() -> sqlite3.Connection:
+def get_db_connection():
+    """Postgres (pooled) when DATABASE_URL/POSTGRES_URL is configured, otherwise the local SQLite file."""
+    if db_backend.is_postgres():
+        return db_backend.pg_connection()
     db_path = get_db_path()
     # Ensure parent directory exists
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -42,7 +46,23 @@ def get_db_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     return conn
 
+def _init_postgres():
+    # Serverless instances can cold-start together: create the schema in one transaction that holds
+    # an advisory lock, so concurrent CREATE TABLE IF NOT EXISTS calls can't collide.
+    with db_backend.get_pool().connection() as raw:
+        with raw.transaction():
+            raw.execute("SELECT pg_advisory_xact_lock(4281)")
+            for statement in db_backend.PG_SCHEMA:
+                raw.execute(statement)
+    cursor = get_db_connection().cursor()
+    _redact_stored_credentials(cursor)
+    _hash_stored_session_tokens(cursor)
+    seed_admin_from_env()
+
 def init_db():
+    if db_backend.is_postgres():
+        _init_postgres()
+        return
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -462,8 +482,9 @@ def add_safe_ip(ip: str, label: str = "Authorized Operator Workstation", added_b
     if owner_id is None:
         cursor.execute("DELETE FROM safe_ips WHERE ip = ? AND owner_id IS NULL", (clean_ip,))
     cursor.execute("""
-        INSERT OR REPLACE INTO safe_ips (ip, owner_id, label, added_at, added_by)
+        INSERT INTO safe_ips (ip, owner_id, label, added_at, added_by)
         VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT (ip, owner_id) DO UPDATE SET label = excluded.label, added_at = excluded.added_at, added_by = excluded.added_by
     """, (clean_ip, owner_id, str(label)[:120], now_iso, added_by))
     conn.commit()
     conn.close()
@@ -536,7 +557,7 @@ def consume_captcha(sig: str, expires_at: float) -> bool:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM used_captchas WHERE expires_at < ?", (time.time(),))
-    cursor.execute("INSERT OR IGNORE INTO used_captchas (sig, expires_at) VALUES (?, ?)", (sig, expires_at))
+    cursor.execute("INSERT INTO used_captchas (sig, expires_at) VALUES (?, ?) ON CONFLICT (sig) DO NOTHING", (sig, expires_at))
     first_use = cursor.rowcount == 1
     conn.commit()
     conn.close()
@@ -576,7 +597,7 @@ def db_is_locked(ip: str, window_seconds: int = 600, max_attempts: int = 5, lock
     count = cursor.fetchone()[0]
     if count >= max_attempts:
         locked_until = now + lockout_seconds
-        cursor.execute("INSERT OR REPLACE INTO login_lockouts (ip, locked_until) VALUES (?, ?)", (clean_ip, locked_until))
+        cursor.execute("INSERT INTO login_lockouts (ip, locked_until) VALUES (?, ?) ON CONFLICT (ip) DO UPDATE SET locked_until = excluded.locked_until", (clean_ip, locked_until))
         cursor.execute("DELETE FROM login_attempts WHERE ip = ?", (clean_ip,))
         conn.commit()
         conn.close()
@@ -602,7 +623,7 @@ def db_record_failure(ip: str, window_seconds: int = 600, max_attempts: int = 5,
 
     if count >= max_attempts:
         locked_until = now + lockout_seconds
-        cursor.execute("INSERT OR REPLACE INTO login_lockouts (ip, locked_until) VALUES (?, ?)", (clean_ip, locked_until))
+        cursor.execute("INSERT INTO login_lockouts (ip, locked_until) VALUES (?, ?) ON CONFLICT (ip) DO UPDATE SET locked_until = excluded.locked_until", (clean_ip, locked_until))
         cursor.execute("DELETE FROM login_attempts WHERE ip = ?", (clean_ip,))
         conn.commit()
         conn.close()
@@ -642,8 +663,9 @@ def record_audit_log(
     cursor.execute("""
         INSERT INTO audit_logs (timestamp, actor, client_ip, action, target, outcome, metadata)
         VALUES (?, ?, ?, ?, ?, ?, ?)
+        RETURNING id
     """, (now_iso, actor, client_ip, action, target, outcome, meta_json))
-    log_id = cursor.lastrowid
+    log_id = cursor.fetchone()[0]
     conn.commit()
     conn.close()
     return log_id
@@ -675,8 +697,12 @@ def save_token(token: Token) -> Token:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT OR REPLACE INTO tokens (id, token_type, label, description, created_at, trigger_count, is_active, metadata, owner_id, owner_email)
+        INSERT INTO tokens (id, token_type, label, description, created_at, trigger_count, is_active, metadata, owner_id, owner_email)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (id) DO UPDATE SET token_type = excluded.token_type, label = excluded.label,
+            description = excluded.description, created_at = excluded.created_at, trigger_count = excluded.trigger_count,
+            is_active = excluded.is_active, metadata = excluded.metadata, owner_id = excluded.owner_id,
+            owner_email = excluded.owner_email
     """, (
         token.id,
         token.token_type,
@@ -758,6 +784,7 @@ def record_incident(event: IncidentEvent) -> int:
             is_tor, gpu_renderer, screen_res, cpu_cores, device_memory,
             local_lan_ip, client_timezone, raw_headers, mitre_technique
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        RETURNING id
     """, (
         event.token_id,
         event.timestamp,
@@ -788,7 +815,7 @@ def record_incident(event: IncidentEvent) -> int:
         json.dumps(event.raw_headers) if event.raw_headers else None,
         event.mitre_technique
     ))
-    incident_id = cursor.lastrowid
+    incident_id = cursor.fetchone()[0]
 
     # Merge browser telemetry that beat the incident row to the database
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=TELEMETRY_WINDOW_MINUTES)).isoformat()
@@ -986,7 +1013,7 @@ def list_incidents_by_ip(ip: str, user_id: Optional[str] = None, is_admin: bool 
     cursor = conn.cursor()
     cursor.execute(
         f"SELECT * FROM (SELECT incidents.* {from_clause} {where} AND incidents.attacker_ip = ?"
-        f" ORDER BY incidents.id DESC LIMIT ?) ORDER BY id ASC",
+        f" ORDER BY incidents.id DESC LIMIT ?) AS recent ORDER BY id ASC",
         (*params, ip, limit)
     )
     rows = cursor.fetchall()

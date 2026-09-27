@@ -7,3 +7,5 @@ requests==2.34.2
 rich==15.0.0
 watchdog==6.0.0
 reportlab==5.0.1
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3

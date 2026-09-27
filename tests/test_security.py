@@ -317,13 +317,14 @@ class TestRoundTwo(SecurityTestCase):
         self.assertNotEqual(csp, second, "each response gets a fresh nonce")
 
     def test_sessions_are_stored_hashed_and_can_all_be_ended(self):
-        import sqlite3
-        from honeygrid.database import get_db_path
+        from honeygrid.database import get_db_connection
         user = _user()
         token_a = create_session(user.id, expire_hours=1)
         token_b = create_session(user.id, expire_hours=1)
-        conn = sqlite3.connect(get_db_path())
-        stored = [r[0] for r in conn.execute("SELECT session_token FROM sessions WHERE user_id = ?", (user.id,))]
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT session_token FROM sessions WHERE user_id = ?", (user.id,))
+        stored = [r[0] for r in cursor.fetchall()]
         conn.close()
         self.assertEqual(len(stored), 2)
         self.assertNotIn(token_a, stored)
