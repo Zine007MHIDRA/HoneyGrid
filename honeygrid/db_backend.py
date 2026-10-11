@@ -35,7 +35,23 @@ def _normalize_url(url: str) -> str:
     query.setdefault("application_name", "honeygrid")
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
 
+_POSTGRES_DISABLED = False
+
+def disable_postgres(reason: str = ""):
+    global _POSTGRES_DISABLED, _pool
+    _POSTGRES_DISABLED = True
+    if reason:
+        print(f"[!] Disabling Postgres backend: {reason}")
+    if _pool is not None:
+        try:
+            _pool.close()
+        except Exception:
+            pass
+        _pool = None
+
 def is_postgres() -> bool:
+    if _POSTGRES_DISABLED:
+        return False
     return database_url() is not None
 
 def describe() -> str:
@@ -131,13 +147,14 @@ def get_pool():
         with _pool_lock:
             if _pool is None:
                 from psycopg_pool import ConnectionPool
+                timeout_val = float(os.getenv("HONEYGRID_DB_CONNECT_TIMEOUT", "3.0"))
                 _pool = ConnectionPool(
                     database_url(),
                     min_size=0,
                     max_size=int(os.getenv("HONEYGRID_DB_POOL_SIZE", "4")),
                     # Supabase's transaction pooler can't keep prepared statements; statements autocommit
                     kwargs={"prepare_threshold": None, "autocommit": True},
-                    timeout=15,
+                    timeout=timeout_val,
                     max_idle=120,
                     open=True,
                 )

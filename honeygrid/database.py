@@ -39,7 +39,11 @@ def get_db_path() -> str:
 def get_db_connection():
     """Postgres (pooled) when DATABASE_URL/POSTGRES_URL is configured, otherwise the local SQLite file."""
     if db_backend.is_postgres():
-        return db_backend.pg_connection()
+        try:
+            return db_backend.pg_connection()
+        except Exception as e:
+            print(f"[!] Failed to acquire Postgres connection ({e}). Falling back to SQLite.")
+            db_backend.disable_postgres(str(e))
     db_path = get_db_path()
     # Ensure parent directory exists
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -47,23 +51,30 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def _init_postgres():
-    # Serverless instances can cold-start together: create the schema in one transaction that holds
-    # an advisory lock, so concurrent CREATE TABLE IF NOT EXISTS calls can't collide.
-    with db_backend.get_pool().connection() as raw:
-        with raw.transaction():
-            raw.execute("SELECT pg_advisory_xact_lock(4281)")
-            for statement in db_backend.PG_SCHEMA:
-                raw.execute(statement)
-    cursor = get_db_connection().cursor()
-    _redact_stored_credentials(cursor)
-    _hash_stored_session_tokens(cursor)
-    seed_admin_from_env()
+def _init_postgres() -> bool:
+    try:
+        # Serverless instances can cold-start together: create the schema in one transaction that holds
+        # an advisory lock, so concurrent CREATE TABLE IF NOT EXISTS calls can't collide.
+        with db_backend.get_pool().connection() as raw:
+            with raw.transaction():
+                raw.execute("SELECT pg_advisory_xact_lock(4281)")
+                for statement in db_backend.PG_SCHEMA:
+                    raw.execute(statement)
+        cursor = get_db_connection().cursor()
+        _redact_stored_credentials(cursor)
+        _hash_stored_session_tokens(cursor)
+        seed_admin_from_env()
+        return True
+    except Exception as e:
+        print(f"[!] Failed to initialize Postgres database ({e}). Falling back to serverless SQLite.")
+        db_backend.disable_postgres(str(e))
+        return False
 
 def init_db():
     if db_backend.is_postgres():
-        _init_postgres()
-        return
+        if _init_postgres():
+            return
+        # If _init_postgres failed, Postgres was disabled. Fall through to SQLite init below.
     conn = get_db_connection()
     cursor = conn.cursor()
     
